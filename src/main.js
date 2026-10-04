@@ -105,7 +105,7 @@ function showSpec(spec,generated=false){
   $('intro-copy').hidden=generated;$('refine-button').disabled=!generated||!state.image||state.busy||renderUnavailable;
   let triangles=0;viewer?.root.traverse(n=>{if(n.geometry)triangles+=(n.geometry.index?.count||n.geometry.attributes.position?.count||0)/3;});
   $('polygon-count').textContent=`${Math.round(triangles).toLocaleString()} triangles`;
-  refreshMaterials();refreshScene();$('model-status').textContent=generated?'Model ready':'Ready to explore';
+  refreshMaterials();refreshScene();$('model-status').textContent=renderUnavailable?'WebGL unavailable':generated?'Model ready':'Ready to explore';
   if(generated)document.querySelectorAll('.example-card').forEach(b=>b.classList.remove('active'));
 }
 showSpec(structuredClone(examples.chair));
@@ -216,9 +216,12 @@ document.querySelectorAll('[data-example]').forEach(b=>b.onclick=()=>{if(state.b
 async function thumbnails(){
   if(renderUnavailable)return;
   const mini=new THREE.WebGLRenderer({antialias:true,alpha:true});mini.setSize(240,200);mini.setPixelRatio(1);mini.toneMapping=THREE.ACESFilmicToneMapping;mini.toneMappingExposure=1.3;
-  const s=new THREE.Scene();s.environment=scene.environment;s.add(new THREE.HemisphereLight('#fff7ea','#a09584',3));const l=new THREE.DirectionalLight('#fff7ee',3);l.position.set(3,5,4);s.add(l);const c=new THREE.PerspectiveCamera(35,1.2,.01,50);
+  const s=new THREE.Scene();
+  // GPU textures belong to their renderer; create a separate thumbnail environment.
+  const miniRoom=new RoomEnvironment(),miniPmrem=new THREE.PMREMGenerator(mini),miniEnvironment=miniPmrem.fromScene(miniRoom,.04);
+  s.environment=miniEnvironment.texture;miniRoom.dispose();miniPmrem.dispose();
+  s.add(new THREE.HemisphereLight('#fff7ea','#a09584',3));const l=new THREE.DirectionalLight('#fff7ee',3);l.position.set(3,5,4);s.add(l);const c=new THREE.PerspectiveCamera(35,1.2,.01,50);
   try{for(const [id,spec] of Object.entries(examples)){const viewer=buildModel(spec);s.add(viewer.root);const box=new THREE.Box3().setFromObject(viewer.root),center=box.getCenter(new THREE.Vector3()),size=box.getSize(new THREE.Vector3());const distance=Math.max(size.x,size.y,size.z)*2.2;c.position.copy(center).add(new THREE.Vector3(1.4,.9,2).normalize().multiplyScalar(distance));c.lookAt(center);mini.render(s,c);$("thumb-"+id).src=mini.domElement.toDataURL('image/png');s.remove(viewer.root);disposeModel(viewer);}}
-  catch{toast('Example thumbnails could not render. The main viewer is still available.',true);}finally{mini.dispose();}
+  catch{toast('Example thumbnails could not render. The main viewer is still available.',true);}finally{miniEnvironment.dispose();mini.dispose();}
 }
 thumbnails();
-
