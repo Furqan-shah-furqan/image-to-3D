@@ -4,6 +4,8 @@ A Vercel-ready image-to-3D workspace built for Furqan Shah. Upload an image, con
 
 The full [img2threejs](https://github.com/img2threejs/img2threejs) toolkit is imported alongside this web app. The original README is preserved in [docs/UPSTREAM_README.md](docs/UPSTREAM_README.md). Imported source commit: `6e60b5e22419464b4853e01ddb6c0e6f6659a733`.
 
+Imported toolkit version: [![img2threejs version](https://img.shields.io/badge/version-2.0.0-green.svg)](docs/UPSTREAM_README.md)
+
 ## Use the studio
 
 1. Click **Add API key** at the top right. Get a key at <https://aistudio.google.com/apikey>.
