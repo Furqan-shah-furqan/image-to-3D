@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import {applySurface,foldedPatch} from './surface.js';
 export function buildModel(spec) {
   const root = new THREE.Group(); root.name = spec.title;
   const materials = new Map(spec.materials.map(m => [m.id, new THREE.MeshPhysicalMaterial({
     name: m.name, color: m.color, roughness: m.roughness, metalness: m.metalness,
     clearcoat: m.clearcoat || 0, opacity: m.opacity ?? 1, transparent: (m.opacity ?? 1) < 1 || (m.transmission || 0) > 0,
-    transmission: m.transmission || 0, thickness: .15, side: THREE.DoubleSide
+    transmission: m.transmission || 0, thickness: .15, side: THREE.DoubleSide, vertexColors: !!m.surface
   })]));
   const nodes = new Map();
   for (const c of spec.components) {
@@ -27,8 +28,10 @@ export function buildModel(spec) {
         break;
       }
       case 'mesh': geometry = new THREE.BufferGeometry(); geometry.setAttribute('position',new THREE.Float32BufferAttribute(c.points.flat(),3)); geometry.setIndex(c.indices); geometry.computeVertexNormals(); break;
+      case 'patch': geometry = foldedPatch(p); break;
       default: throw new Error(`Unsupported geometry: ${c.primitive}`);
     }
+    applySurface(geometry,c.deform,spec.materials.find(m=>m.id===c.material).surface);
     const mesh = new THREE.Mesh(geometry,materials.get(c.material));
     mesh.name = c.name; mesh.userData.componentId = c.id; mesh.userData.materialId = c.material;
     mesh.position.fromArray(c.position); mesh.rotation.set(...c.rotation); mesh.scale.fromArray(c.scale);

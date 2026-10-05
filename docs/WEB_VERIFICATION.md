@@ -10,3 +10,11 @@ Verified during initial implementation:
 - Deployed homepage returns HTTP 200. Deployed generation function imports correctly and rejects GET with HTTP 405.
 
 Limitations: the execution environment cannot create a software WebGL context, so rendered model appearance, orbiting and materials have not been visually verified here. Live Gemini generation/review has not been run because the user's key is supplied later through the homepage. No live Gemini success, photorealistic reconstruction, or upstream strict quality-gate completion is claimed.
+
+## Accuracy update
+
+- 12 web tests pass, including deterministic folded geometry/vertex colours, bounded deformation and additional-image input limits. Production Vite build passes.
+- Desktop/mobile browser checks pass for primary upload and adding/removing additional angles, without horizontal overflow.
+- Folded and mottled geometry exports to valid GLB v2 (709,812 bytes), with COLOR_0 attributes present. The self-contained Three.js export imports and builds successfully.
+- Earlier live production generation succeeded with Auto fallback to Flash Lite. The live test of this accuracy update returned HTTP 429 from Google for the supplied test key; new-generation visual accuracy and multi-pass live review remain unverified.
+- Procedural surface variation is not a photographic texture. The environment still cannot render WebGL, so no visual-fidelity improvement is claimed as measured.

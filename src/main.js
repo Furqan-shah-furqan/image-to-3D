@@ -6,6 +6,7 @@ import {GLTFExporter} from 'three/addons/exporters/GLTFExporter.js';
 import {createIcons,Box,KeyRound,Github,Scan,ImagePlus,RefreshCw,X,Sparkles,ArrowUpRight,ArrowRight,Info,ScanEye,Columns2,Camera,Maximize,MousePointer2,Minus,Plus,SlidersHorizontal,Diamond,WandSparkles,Download,ShieldCheck,PlugZap,Eye,Layers3,Circle} from 'lucide';
 import {buildModel} from './model.js';
 import modelSource from './model.js?raw';
+import surfaceSource from './surface.js?raw';
 import {examples} from './examples.js';
 import {validateScene} from '../lib/scene-spec.js';
 
@@ -127,14 +128,14 @@ document.querySelectorAll('[data-left-tab]').forEach(b=>b.onclick=()=>{document.
 document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-view]').forEach(n=>n.classList.toggle('active',n===b));$('compare-reference').hidden=b.dataset.view!=='compare';$('intro-copy').hidden=state.generated||b.dataset.view==='compare';});
 document.querySelectorAll('[data-detail]').forEach(b=>b.onclick=()=>{state.detail=b.dataset.detail;document.querySelectorAll('[data-detail]').forEach(n=>n.classList.toggle('active',n===b));});
 
-async function compressedImage(file){
+async function compressedImage(file,maxEdge=1280,maxLength=2200000){
   if(!['image/jpeg','image/png','image/webp'].includes(file.type))throw new Error('Please choose a JPG, PNG or WebP image.');
   if(file.size>20*1024*1024)throw new Error('Your image is larger than 20 MB. Choose a smaller file.');
   const image=await createImageBitmap(file).catch(()=>{throw new Error('This image could not be opened. Try another JPG or PNG.');});
   try{
-    const c=document.createElement('canvas');const scale=Math.min(1,1280/Math.max(image.width,image.height));c.width=Math.max(1,Math.round(image.width*scale));c.height=Math.max(1,Math.round(image.height*scale));
+    const c=document.createElement('canvas');const scale=Math.min(1,maxEdge/Math.max(image.width,image.height));c.width=Math.max(1,Math.round(image.width*scale));c.height=Math.max(1,Math.round(image.height*scale));
     const context=c.getContext('2d');context.fillStyle='#ffffff';context.fillRect(0,0,c.width,c.height);context.drawImage(image,0,0,c.width,c.height);
-    const encoded=c.toDataURL('image/jpeg',.88);if(encoded.length>2200000)throw new Error('This image is too detailed to upload. Resize it and try again.');return encoded;
+    const encoded=c.toDataURL('image/jpeg',.88);if(encoded.length>maxLength)throw new Error('This image is too detailed to upload. Resize it and try again.');return encoded;
   }finally{image.close();}
 }
 async function upload(file){if(state.busy)return toast('Finish or cancel the current generation first.',true);if(!file)return;try{state.image=await compressedImage(file);state.file=file.name;$('reference-image').src=state.image;$('compare-image').src=state.image;$('reference-image').hidden=false;$('compare-image').hidden=false;$('compare-empty').hidden=true;$('upload-empty').hidden=true;$('replace-image').hidden=false;$('file-info').hidden=false;$('file-name').textContent=file.name;$('refine-button').disabled=!state.generated||renderUnavailable;toast('Reference added. Ready when you are.');}catch(error){toast(error.message,true);}$('image-input').value='';}
@@ -143,6 +144,22 @@ $('drop-zone').onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.
 $('drop-zone').ondragover=event=>{event.preventDefault();$('drop-zone').classList.add('dragging');};$('drop-zone').ondragleave=()=>$('drop-zone').classList.remove('dragging');$('drop-zone').ondrop=event=>{event.preventDefault();$('drop-zone').classList.remove('dragging');upload(event.dataTransfer.files[0]);};
 $('remove-image').onclick=()=>{if(state.busy)return;state.image=null;state.file=null;$('reference-image').hidden=true;$('reference-image').removeAttribute('src');$('compare-image').hidden=true;$('compare-image').removeAttribute('src');$('compare-empty').hidden=false;$('upload-empty').hidden=false;$('replace-image').hidden=true;$('file-info').hidden=true;$('refine-button').disabled=true;};
 $('compare-image').hidden=true;
+state.extraImages=[];
+function renderAngles(){
+  $('angle-list').replaceChildren();
+  for(const [index,reference] of state.extraImages.entries()){
+    const row=document.createElement('div'),image=document.createElement('img'),name=document.createElement('span'),remove=document.createElement('button');
+    image.src=reference.image;image.alt=`Additional reference ${index+1}`;name.textContent=reference.name;remove.textContent='×';remove.className='icon-button';remove.setAttribute('aria-label',`Remove reference angle ${index+1}`);
+    remove.onclick=()=>{if(state.busy)return;state.extraImages.splice(index,1);renderAngles();};row.append(image,name,remove);$('angle-list').append(row);
+  }
+}
+$('add-angles').onclick=()=>{if(!state.busy)$('angle-input').click();};
+$('angle-input').onchange=async()=>{
+  if(state.busy)return;
+  state.refsLoading=true;$('add-angles').disabled=true;
+  try{for(const file of $('angle-input').files){if(state.extraImages.length>=3){toast('Use up to three additional angles.',true);break;}state.extraImages.push({name:file.name,image:await compressedImage(file,720,450000)});}renderAngles();}
+  catch(error){renderAngles();toast(error.message,true);}finally{$('angle-input').value='';state.refsLoading=false;$('add-angles').disabled=state.busy;}
+};
 $('upload-shortcut').onclick=()=>{$('image-input').click();};
 
 function captureRender(width=900,height=900){
@@ -155,13 +172,14 @@ function captureRender(width=900,height=900){
 let elapsedTimer,startTime;
 function progress(title,description,percentage){$('progress-title').textContent=title;$('progress-detail').textContent=description;$('progress-bar').style.width=`${percentage}%`;}
 function setBusy(busy){
-  state.busy=busy;$('generation-overlay').hidden=!busy;$('generate-button').disabled=busy;$('refine-button').disabled=busy||!state.generated||!state.image||renderUnavailable;$('cancel-button').hidden=!busy;$('image-input').disabled=busy;
+  state.busy=busy;$('add-angles').disabled=busy;$('angle-input').disabled=busy;$('generation-overlay').hidden=!busy;$('generate-button').disabled=busy;$('refine-button').disabled=busy||!state.generated||!state.image||renderUnavailable;$('cancel-button').hidden=!busy;$('image-input').disabled=busy;
   document.querySelectorAll('.example-card').forEach(b=>b.disabled=busy);$('export-button').disabled=busy||renderUnavailable;
   clearInterval(elapsedTimer);if(busy){startTime=Date.now();$('elapsed').textContent='0s elapsed';elapsedTimer=setInterval(()=>$('elapsed').textContent=`${Math.floor((Date.now()-startTime)/1000)}s elapsed`,1000);}
 }
-function requestBody(prompt,current,render){return {image:state.image,prompt,detail:state.detail,model:state.model,...(current?{current,render}:{})};}
+function requestBody(prompt,current,render){return {image:state.image,extraImages:state.extraImages.map(r=>r.image),prompt,detail:state.detail,model:state.model,...(current?{current,render}:{})};}
 async function generate(refinement){
   if(state.busy)return;
+  if(state.refsLoading)return toast('Wait for the reference angles to finish loading.',true);
   if(!state.key){openKey();return;}
   if(!state.image){toast('Upload a reference image first.',true);$('image-input').click();return;}
   if(renderUnavailable)return toast('A working WebGL viewer is required. Enable hardware acceleration.',true);
@@ -176,18 +194,21 @@ async function generate(refinement){
     showSpec(initial.spec,true);$('model-source').textContent=initial.model.replace('gemini-','Gemini ');
     progress('Building your 3D scene','Creating geometry, applying materials and lighting…',65);
     if($('review-option').checked){
+      let bestSpec=structuredClone(initial.spec),bestReview=null,bestModel=initial.model,candidateModel=initial.model;
       try{
-        progress('Comparing the result','Checking the render against your reference image…',75);
-        const {review}=await api('review',{image:state.image,render:captureRender(),model:initial.model},state.key,state.controller.signal);
-        if(review.needsRevision && review.issues.length){
-          progress('A little closer to your reference','Refining the proportions and details identified in the visual review…',90);
+        const maxPasses={draft:1,balanced:2,detailed:3}[state.detail];
+        for(let pass=0;pass<=maxPasses;pass++){
+          progress('Comparing the result',`Checking proportions and details · pass ${pass+1}…`,75);
+          const {review}=await api('review',{image:state.image,extraImages:state.extraImages.map(r=>r.image),render:captureRender(),model:initial.model},state.key,state.controller.signal);
+          if(bestReview && review.similarity<=bestReview.similarity){showSpec(bestSpec,true);$('model-source').textContent=bestModel.replace('gemini-','Gemini ');break;}
+          bestSpec=structuredClone(state.spec);bestReview=review;bestModel=candidateModel;
+          if(!review.needsRevision || !review.issues.length || pass===maxPasses)break;
+          progress('Matching your reference',`Refining silhouette, proportions and surfaces · ${pass+1}/${maxPasses}…`,90);
           const revised=await api('generate',requestBody(`${basePrompt}\nImprove these specific issues: ${review.issues.join('; ')}`.slice(0,2000),state.spec,captureRender()),state.key,state.controller.signal);
-          showSpec(revised.spec,true);$('model-source').textContent=revised.model.replace('gemini-','Gemini ');
-          // Re-review the final render; an earlier review must not masquerade as a final score.
-          const final=await api('review',{image:state.image,render:captureRender(),model:revised.model},state.key,state.controller.signal);
-          $('model-notes').textContent=`${final.review.summary} AI similarity estimate: ${Math.round(final.review.similarity)}%. ${final.review.needsRevision?'Further refinement suggested. ':''}${state.spec.limitations.join(' ')}`;
-        }else $('model-notes').textContent=`${review.summary} AI similarity estimate: ${Math.round(review.similarity)}%. ${state.spec.limitations.join(' ')}`;
-      }catch(error){if(state.controller.signal.aborted)throw error;toast(`Model generated, but the optional visual refinement did not finish: ${error.message}`,true);$('model-notes').textContent=`${state.spec.description} Visual review incomplete. ${state.spec.limitations.join(' ')}`;}
+          showSpec(revised.spec,true);candidateModel=revised.model;$('model-source').textContent=revised.model.replace('gemini-','Gemini ');
+        }
+        $('model-notes').textContent=`${bestReview.summary} AI similarity estimate: ${Math.round(bestReview.similarity)}% (not measured accuracy). ${bestReview.needsRevision?'Further refinement suggested. ':''}${state.spec.limitations.join(' ')}`;
+      }catch(error){if(state.controller.signal.aborted)throw error;showSpec(bestSpec,true);$('model-source').textContent=bestModel.replace('gemini-','Gemini ');toast(`Model generated, but the optional visual refinement did not finish: ${error.message}`,true);$('model-notes').textContent=`${state.spec.description} Visual review incomplete. ${state.spec.limitations.join(' ')}`;}
     }else $('model-notes').textContent=`${state.spec.description} ${state.spec.limitations.join(' ')}`;
     $('model-status').textContent='Your model is ready';toast('Your 3D model is ready. Explore, refine or export it.');
   }catch(error){
@@ -204,7 +225,7 @@ $('export-button').onclick=async()=>{
   if(!state.viewer)return;try{
     const format=$('export-format').value,slug=filename();
     if(format==='json')download(JSON.stringify(state.spec,null,2),`${slug}.json`,'application/json');
-    else if(format==='js')download(`${modelSource}\n\nexport const spec = ${JSON.stringify(state.spec,null,2)};\nexport default buildModel(spec).root;\n`,`${slug}.js`,'text/javascript');
+    else if(format==='js')download(`${modelSource.replace("import {applySurface,foldedPatch} from './surface.js';",surfaceSource.replace("import * as THREE from 'three';",''))}\n\nexport const spec = ${JSON.stringify(state.spec,null,2)};\nexport default buildModel(spec).root;\n`,`${slug}.js`,'text/javascript');
     else{const result=await new GLTFExporter().parseAsync(state.viewer.root,{binary:true,onlyVisible:true});download(result,`${slug}.glb`,'model/gltf-binary');}
     toast('Model exported. Make something with it.');
   }catch(error){toast(`Export failed: ${error.message}`,true);}

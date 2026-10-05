@@ -8,3 +8,5 @@
 @media(max-width:900px){.workspace{max-height:none}.right-panel{flex-shrink:0}}
 @media(max-width:640px){.workspace{height:auto;max-height:none}.left-panel,.right-panel,.viewport{flex-shrink:0}.left-panel{overflow:visible}.right-panel{overflow:visible}}
 .example-art img:not([src]){visibility:hidden}
+
+#add-angles{margin:10px 0}.angle-list>div{display:flex;align-items:center;gap:7px;margin:6px 0;font-size:10px}.angle-list img{width:35px;height:35px;object-fit:cover;border-radius:6px}.angle-list span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

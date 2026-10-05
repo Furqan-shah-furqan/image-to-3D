@@ -27,6 +27,9 @@
             <span id="replace-image" hidden><i data-lucide="refresh-cw"></i> Replace image</span>
           </label>
           <div id="file-info" class="file-info" hidden><span id="file-name"></span><button id="remove-image" class="icon-button" title="Remove reference" aria-label="Remove reference"><i data-lucide="x"></i></button></div>
+          <button id="add-angles" class="secondary-button" type="button">Add reference angles · up to 3</button>
+          <input id="angle-input" type="file" accept="image/jpeg,image/png,image/webp" multiple hidden />
+          <div id="angle-list" class="angle-list" aria-label="Additional reference angles"></div>
           <label class="field-label" for="prompt">Make it your own <span>Optional</span></label>
           <textarea id="prompt" rows="3" maxlength="2000" placeholder="Keep the rounded edges, match the colours, focus on the object…"></textarea>
           <div class="field-label">Detail level</div>

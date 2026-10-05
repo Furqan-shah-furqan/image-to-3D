@@ -7,12 +7,32 @@ import {availableModels,resolveModel,extractJson,imagePart,googleRequest,request
 import generate from '../api/generate.js';
 import models from '../api/models.js';
 import review from '../api/review.js';
+import {referenceParts} from '../lib/references.js';
 
 test('every example validates and builds actual Three.js geometry',()=>{
   for(const spec of Object.values(examples)){
     validateScene(spec);const viewer=buildModel(spec);assert.equal(viewer.nodes.size,spec.components.length);
     for(const mesh of viewer.nodes.values())assert.ok(mesh.geometry.attributes.position.count>0);
   }
+});
+test('folded organic surfaces build deterministic, exportable geometry and colour attributes',()=>{
+  const spec=structuredClone(examples.chair);
+  const material=spec.materials.find(m=>m.id===spec.components[0].material);material.surface={amount:.3,scale:12,seed:42};
+  spec.components[0]={...spec.components[0],primitive:'patch',params:[1,1,.08,8,.05],deform:{amplitude:.01,frequency:8,seed:7}};
+  validateScene(spec);const first=buildModel(spec),second=buildModel(spec),geometry=first.nodes.get(spec.components[0].id).geometry;
+  assert.equal(geometry.attributes.position.count,1681);
+  assert.ok([...geometry.attributes.position.array].every(Number.isFinite));
+  assert.deepEqual(geometry.attributes.position.array,second.nodes.get(spec.components[0].id).geometry.attributes.position.array);
+  const colors=geometry.attributes.color.array;assert.ok(colors.some(n=>n<1));assert.ok(colors.every(n=>n>=.7 && n<=1));
+  spec.components[0].deform.amplitude=20;assert.throws(()=>validateScene(spec),/deformation/);
+  spec.components[0].deform.amplitude=.01;material.surface.amount=2;assert.throws(()=>validateScene(spec),/surface/);
+});
+test('additional references are labelled and bounded before reaching the provider',()=>{
+  const image='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9ksAAAAASUVORK5CYII=';
+  assert.equal(referenceParts({image,extraImages:[image,image]}).filter(p=>p.inlineData).length,3);
+  assert.throws(()=>referenceParts({image,extraImages:[image,image,image,image]}),/three additional/);
+  assert.throws(()=>referenceParts({image,extraImages:['invalid']}),/valid additional/);
+  assert.throws(()=>referenceParts({image,prompt:'x'.repeat(4000001)}),/too large/);
 });
 test('rejects executable geometry, missing materials, cycles and excessive allocations',()=>{
   const invalid=change=>{const spec=structuredClone(examples.chair);change(spec);assert.throws(()=>validateScene(spec),/Invalid scene/);};
