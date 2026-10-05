@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {validateScene} from '../lib/scene-spec.js';
 import {examples} from '../src/examples.js';
 import {buildModel} from '../src/model.js';
-import {availableModels,resolveModel,extractJson,imagePart,googleRequest} from '../lib/gemini.js';
+import {availableModels,resolveModel,extractJson,imagePart,googleRequest,requestKey} from '../lib/gemini.js';
 import generate from '../api/generate.js';
 import models from '../api/models.js';
 import review from '../api/review.js';
@@ -39,6 +39,13 @@ test('API errors redact secrets; truncated and invalid model output fail clearly
   assert.throws(()=>imagePart('data:image/png;base64,dGhpcyBpcyBub3QgYW4gaW1hZ2U='),/file type/);
 });
 function response(){return {statusCode:200,headers:{},setHeader(k,v){this.headers[k]=v;},status(n){this.statusCode=n;return this;},json(data){this.data=data;return this;}};}
+test('accepts opaque dotted API keys and rejects whitespace or control characters',()=>{
+  const key='AQ.synthetic-test-key_1234567890';
+  assert.equal(requestKey({headers:{authorization:`Bearer ${key}`}}),key);
+  for(const invalid of ['', 'short', 'synthetic key with spaces', 'synthetic-key-with\r\nnewline', 'x'.repeat(513)]){
+    assert.throws(()=>requestKey({headers:{authorization:`Bearer ${invalid}`}}),/valid Gemini API key/);
+  }
+});
 test('all API endpoints reject missing keys and GET before touching Google',async()=>{
   for(const handler of [generate,models,review]){const res=response();await handler({method:'POST',headers:{},body:{}},res);assert.equal(res.statusCode,401);const get=response();await handler({method:'GET',headers:{}},get);assert.equal(get.statusCode,405);}
 });
