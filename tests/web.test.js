@@ -111,3 +111,43 @@ test('GLB import rejects external resources before loader network requests',asyn
   assert.throws(()=>validateGLB(new ArrayBuffer(30)),/valid GLB/);
   assert.equal(validateGLB(glb({asset:{version:'2.0'}})).asset.version,'2.0');
 });
+
+test('organic deformation keeps shared cap edges closed and UV seam normals continuous',async()=>{
+  const THREE=await import('three');const {applySurface}=await import('../src/surface.js');
+  for(const geometry of [new THREE.CylinderGeometry(1,1,2,48,8),new THREE.SphereGeometry(1,48,32)]){
+    const p=geometry.attributes.position,groups=new Map();
+    for(let i=0;i<p.count;i++){const key=[p.getX(i),p.getY(i),p.getZ(i)].map(v=>Math.round(v*1e6)).join(',');if(!groups.has(key))groups.set(key,[]);groups.get(key).push(i);}
+    const oldNormals=geometry.attributes.normal.array.slice();applySurface(geometry,{amplitude:.12,frequency:7,seed:3});
+    for(const indices of groups.values())for(const j of indices){const i=indices[0];for(let axis=0;axis<3;axis++)assert.equal(p.array[i*3+axis],p.array[j*3+axis],'shared positions must remain identical');
+      const dot=oldNormals[i*3]*oldNormals[j*3]+oldNormals[i*3+1]*oldNormals[j*3+1]+oldNormals[i*3+2]*oldNormals[j*3+2];
+      if(dot>.999)for(let axis=0;axis<3;axis++)assert.ok(Math.abs(geometry.attributes.normal.array[i*3+axis]-geometry.attributes.normal.array[j*3+axis])<1e-5,'smooth UV seam normals');
+    }
+    assert.ok([...geometry.attributes.normal.array].every(Number.isFinite));
+  }
+});
+test('textured cylinder has interior surface samples instead of only top and bottom rings',()=>{
+  const spec=structuredClone(examples.lamp);const c=spec.components[0];c.primitive='cylinder';c.params=[1,1,2];c.deform={amplitude:.03,frequency:8,seed:2};
+  const mesh=buildModel(spec).nodes.get(c.id),p=mesh.geometry.attributes.position;
+  assert.ok(Array.from({length:p.count},(_,i)=>p.getY(i)).filter(y=>Math.abs(y)<.7).length>500);
+});
+test('texture quality preserves PBR maps, pixels, color spaces and UV transforms',async()=>{
+  const THREE=await import('three');const {configureTextureQuality}=await import('../src/mesh.js');
+  const map=new THREE.DataTexture(new Uint8Array([12,34,56,255]),1,1);map.colorSpace=THREE.SRGBColorSpace;map.offset.set(.2,.3);const normal=new THREE.Texture();
+  const material=new THREE.MeshStandardMaterial({map,normalMap:normal,roughness:.31,metalness:.2});const pixels=map.image.data.slice();
+  assert.equal(configureTextureQuality({materials:new Map([['m',material]])},16),2);assert.equal(map.anisotropy,8);assert.equal(normal.anisotropy,8);assert.equal(normal.colorSpace,THREE.NoColorSpace);assert.equal(map.colorSpace,THREE.SRGBColorSpace);assert.deepEqual(map.image.data,pixels);assert.equal(map.offset.x,.2);assert.equal(material.roughness,.31);
+});
+test('review cameras fit every corner and do not depend on interactive camera position',async()=>{
+  const THREE=await import('three');const {reviewCamera,REVIEW_VIEWS}=await import('../src/review-render.js');
+  for(const dimensions of [[1,8,1],[8,1,1],[1,1,8]]){const root=new THREE.Mesh(new THREE.BoxGeometry(...dimensions));root.position.set(2,5,-3);const box=new THREE.Box3().setFromObject(root);
+    for(const [,direction] of REVIEW_VIEWS){const camera=reviewCamera(root,direction);for(const x of [box.min.x,box.max.x])for(const y of [box.min.y,box.max.y])for(const z of [box.min.z,box.max.z]){const projected=new THREE.Vector3(x,y,z).project(camera);assert.ok(Math.abs(projected.x)<1&&Math.abs(projected.y)<1&&Math.abs(projected.z)<1);}}
+  }
+});
+test('review capture restores renderer and leaves model materials untouched, even on error',async()=>{
+  const THREE=await import('three');const {captureReview}=await import('../src/review-render.js');
+  const material=new THREE.MeshStandardMaterial({wireframe:true}),root=new THREE.Mesh(new THREE.BoxGeometry(),material);root.visible=false;
+  const size=new THREE.Vector2(700,400);let ratio=2,renders=0;
+  const renderer={toneMappingExposure:1.7,domElement:{},getSize:v=>v.copy(size),getPixelRatio:()=>ratio,setPixelRatio:v=>ratio=v,setSize:(x,y)=>size.set(x,y),render(scene){renders++;const clone=scene.children[0];assert.ok(clone.visible);assert.equal(clone.material.wireframe,false);}};
+  const canvas=()=>({getContext:()=>({fillRect(){},drawImage(){},fillText(){}}),toDataURL:()=> 'data:image/jpeg;base64,fixture'});
+  assert.equal(captureReview(renderer,root,null,canvas),'data:image/jpeg;base64,fixture');assert.equal(renders,4);assert.equal(ratio,2);assert.deepEqual(size.toArray(),[700,400]);assert.equal(renderer.toneMappingExposure,1.7);assert.equal(root.visible,false);assert.ok(material.wireframe);
+  renderer.render=()=>{throw new Error('GPU failure');};assert.throws(()=>captureReview(renderer,root,null,canvas),/GPU failure/);assert.equal(ratio,2);assert.deepEqual(size.toArray(),[700,400]);assert.equal(renderer.toneMappingExposure,1.7);
+});

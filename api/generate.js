@@ -14,7 +14,7 @@ export default async function handler(req,res) {
     if(body.current) {
       try{validateScene(body.current);}catch(error){throw new ApiError(400,error.message);}
       if(JSON.stringify(body.current).length>350000)throw new ApiError(413,'Current scene is too large to refine.');
-      parts.push({text:'Current rendered model (last image, not a reference):'},imagePart(body.render,'Rendered'));
+      parts.push({text:'Current model contact sheet (last image, not a reference): front (+Z), three-quarter, side (+X), back (-Z). These are four views of ONE object.'},imagePart(body.render,'Rendered'));
       instruction+=`\nRefine the current scene, addressing the user request and discrepancies against the reference. Preserve already correct parts. Return the COMPLETE updated scene, not a patch. Current scene: ${JSON.stringify(body.current)}`;
     }
     parts.push({text:instruction});

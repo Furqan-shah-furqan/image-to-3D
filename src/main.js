@@ -5,7 +5,8 @@ import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
 import {GLTFExporter} from 'three/addons/exporters/GLTFExporter.js';
 import {createIcons,Box,KeyRound,Github,Scan,ImagePlus,RefreshCw,X,Sparkles,ArrowUpRight,ArrowRight,Info,ScanEye,Columns2,Camera,Maximize,MousePointer2,Minus,Plus,SlidersHorizontal,Diamond,WandSparkles,Download,ShieldCheck,PlugZap,Eye,Layers3,Circle} from 'lucide';
 import {generateMesh} from './trellis.js';
-import {loadMesh} from './mesh.js';
+import {loadMesh,configureTextureQuality} from './mesh.js';
+import {captureReview} from './review-render.js';
 import {buildModel} from './model.js';
 import modelSource from './model.js?raw';
 import surfaceSource from './surface.js?raw';
@@ -113,7 +114,7 @@ function showSpec(spec,generated=false){
 }
 function assetExportOptions(mesh){$('model-format').textContent=mesh?'Textured GLB':'Procedural 3D';for(const option of $('export-format').options)option.disabled=mesh&&option.value!=='glb';if(mesh)$('export-format').value='glb';}
 async function showMesh(buffer,title,source='Imported GLB'){
-  const viewer=await loadMesh(buffer,title);const box=new THREE.Box3().setFromObject(viewer.root),size=box.getSize(new THREE.Vector3()),center=box.getCenter(new THREE.Vector3());
+  const viewer=await loadMesh(buffer,title);configureTextureQuality(viewer,renderer?.capabilities.getMaxAnisotropy() || 1);const box=new THREE.Box3().setFromObject(viewer.root),size=box.getSize(new THREE.Vector3()),center=box.getCenter(new THREE.Vector3());
   const factor=2.8/Math.max(size.x,size.y,size.z,.001);viewer.root.scale.setScalar(factor);viewer.root.position.set(-center.x*factor,-box.min.y*factor,-center.z*factor);
   if(state.viewer){scene?.remove(state.viewer.root);disposeModel(state.viewer);}scene?.add(viewer.root);
   state.meshBuffer=buffer;state.viewer=viewer;state.spec=viewer.spec;state.assetKind='mesh';state.generated=true;assetExportOptions(true);
@@ -149,7 +150,7 @@ async function compressedImage(file,maxEdge=1280,maxLength=2200000){
   try{
     const c=document.createElement('canvas');const scale=Math.min(1,maxEdge/Math.max(image.width,image.height));c.width=Math.max(1,Math.round(image.width*scale));c.height=Math.max(1,Math.round(image.height*scale));
     const context=c.getContext('2d');context.fillStyle='#ffffff';context.fillRect(0,0,c.width,c.height);context.drawImage(image,0,0,c.width,c.height);
-    const encoded=c.toDataURL('image/jpeg',.88);if(encoded.length>maxLength)throw new Error('This image is too detailed to upload. Resize it and try again.');return encoded;
+    const png=c.toDataURL('image/png');let encoded=png;for(const quality of [.94,.9,.88]){if(encoded.length<=maxLength)break;encoded=c.toDataURL('image/jpeg',quality);}if(encoded.length>maxLength)throw new Error('This image is too detailed to upload. Resize it and try again.');return encoded;
   }finally{image.close();}
 }
 async function upload(file){if(state.busy)return toast('Finish or cancel the current generation first.',true);if(!file)return;try{state.image=await compressedImage(file);state.originalImage=file;state.file=file.name;$('reference-image').src=state.image;$('compare-image').src=state.image;$('reference-image').hidden=false;$('compare-image').hidden=false;$('compare-empty').hidden=true;$('upload-empty').hidden=true;$('replace-image').hidden=false;$('file-info').hidden=false;$('file-name').textContent=file.name;$('refine-button').disabled=state.assetKind==='mesh'||!state.generated||renderUnavailable;toast('Reference added. Ready when you are.');}catch(error){toast(error.message,true);}$('image-input').value='';}
@@ -176,12 +177,10 @@ $('angle-input').onchange=async()=>{
 };
 $('upload-shortcut').onclick=()=>{$('image-input').click();};
 
-function captureRender(width=900,height=900){
-  if(!renderer)throw new Error('The 3D viewer is unavailable.');
-  const size=renderer.getSize(new THREE.Vector2()),pixelRatio=renderer.getPixelRatio(),aspect=camera.aspect;
-  try{
-    renderer.setPixelRatio(1);renderer.setSize(width,height,false);camera.aspect=width/height;camera.updateProjectionMatrix();renderer.render(scene,camera);return canvas.toDataURL('image/jpeg',.88);
-  }finally{renderer.setPixelRatio(pixelRatio);renderer.setSize(size.x,size.y,false);camera.aspect=aspect;camera.updateProjectionMatrix();renderer.render(scene,camera);}
+function captureRender(){
+  if(!renderer || !state.viewer)throw new Error('The 3D viewer is unavailable.');
+  try{return captureReview(renderer,state.viewer.root,scene.environment);}
+  finally{renderer.render(scene,camera);}
 }
 let elapsedTimer,startTime;
 function progress(title,description,percentage){$('progress-title').textContent=title;$('progress-detail').textContent=description;$('progress-bar').style.width=`${percentage}%`;}

@@ -15,12 +15,34 @@ export function foldedPatch(p) {
 }
 export function applySurface(g,deform,surface) {
   const a=g.attributes.position,n=g.attributes.normal;
-  if(deform){
+  if(deform && deform.amplitude>0){
+    // UV/cap seams contain duplicate positions with different vertex normals.
+    // Move each position once so those copies cannot pull apart into cracks.
+    const groups=new Map(),original=n.array.slice();
     for(let i=0;i<a.count;i++){
-      const d=noise(a.getX(i)*deform.frequency,a.getY(i)*deform.frequency,a.getZ(i)*deform.frequency,deform.seed || 0)*deform.amplitude;
-      a.setXYZ(i,a.getX(i)+n.getX(i)*d,a.getY(i)+n.getY(i)*d,a.getZ(i)+n.getZ(i)*d);
+      const key=[a.getX(i),a.getY(i),a.getZ(i)].map(v=>Math.round(v*1e6)).join(',');
+      if(!groups.has(key))groups.set(key,[]);groups.get(key).push(i);
     }
-    g.computeVertexNormals();
+    const direction=new THREE.Vector3();
+    for(const indices of groups.values()){
+      const i=indices[0],x=a.getX(i),y=a.getY(i),z=a.getZ(i);direction.set(0,0,0);
+      // Unique normals avoid bias from duplicated cap centres or UV poles.
+      const normals=new Set();for(const j of indices){const key=[n.getX(j),n.getY(j),n.getZ(j)].map(v=>Math.round(v*1e5)).join(',');if(!normals.has(key)){normals.add(key);direction.add(new THREE.Vector3(n.getX(j),n.getY(j),n.getZ(j)));}}
+      direction.normalize();const d=noise(x*deform.frequency,y*deform.frequency,z*deform.frequency,deform.seed || 0)*deform.amplitude;
+      for(const j of indices)a.setXYZ(j,x+direction.x*d,y+direction.y*d,z+direction.z*d);
+    }
+    g.computeVertexNormals();const computed=n.array.slice();
+    // Smooth across UV seams only where the original surface was smooth.
+    // Preserve intentional hard edges between caps and walls.
+    for(const indices of groups.values())for(const i of indices){
+      direction.set(0,0,0);
+      for(const j of indices)if(original[i*3]*original[j*3]+original[i*3+1]*original[j*3+1]+original[i*3+2]*original[j*3+2]>.999){direction.x+=computed[j*3];direction.y+=computed[j*3+1];direction.z+=computed[j*3+2];}
+      if(direction.lengthSq()<1e-12)direction.set(computed[i*3],computed[i*3+1],computed[i*3+2]);
+      if(direction.lengthSq()<1e-12)direction.set(original[i*3],original[i*3+1],original[i*3+2]);
+      if(direction.lengthSq()<1e-12)direction.set(0,1,0);
+      direction.normalize();n.setXYZ(i,direction.x,direction.y,direction.z);
+    }
+    a.needsUpdate=true;n.needsUpdate=true;
   }
   if(surface){
     const colors=new Float32Array(a.count*3);

@@ -24,3 +24,12 @@ export async function loadMesh(buffer,title='Textured model'){
   const spec={title,description:'Textured mesh. Original UVs and embedded PBR textures are preserved. Hidden sides are inferred from the reference.',materials:[...materials].map(([id,m])=>({id,name:m.name || `Material ${materials.size===1?1:id.slice(0,4)}`,color:`#${m.color?.getHexString() || 'ffffff'}`,roughness:m.roughness ?? 1,metalness:m.metalness ?? 0})),components};
   return {root,materials,nodes,spec};
 }
+
+// Improve oblique texture sampling without changing UVs, color spaces, PBR
+// channels, normal strength or the source pixels imported by GLTFLoader.
+export function configureTextureQuality(viewer,maxAnisotropy=1){
+  const textures=new Set();
+  for(const material of viewer.materials.values())for(const value of Object.values(material))if(value?.isTexture)textures.add(value);
+  for(const texture of textures){texture.anisotropy=Math.max(1,Math.min(8,maxAnisotropy));texture.needsUpdate=true;}
+  return textures.size;
+}
