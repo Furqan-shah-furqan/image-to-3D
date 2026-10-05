@@ -10,3 +10,19 @@
 .example-art img:not([src]){visibility:hidden}
 
 #add-angles{margin:10px 0}.angle-list>div{display:flex;align-items:center;gap:7px;margin:6px 0;font-size:10px}.angle-list img{width:35px;height:35px;object-fit:cover;border-radius:6px}.angle-list span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Project controls share the existing palette and type scale. */
+:root{--control-radius:35px}
+.left-panel,.right-panel{margin-top:16px;scrollbar-width:none;-ms-overflow-style:none}
+.left-panel::-webkit-scrollbar,.right-panel::-webkit-scrollbar{display:none;width:0;height:0}
+#app,.panel,.viewport,.drop-zone,dialog,.example-card,.idea-card{border-radius:var(--control-radius)}
+.segmented,.segmented button,.tabs,.tab,.view-tabs,.view-tabs button,.primary-button,.secondary-button,.dark-button,.key-button,textarea,select,.color-field{border-radius:var(--control-radius)}
+#generation-engine{display:block;width:100%;min-width:0;background:#f0f1ec;color:#505647;border:1px solid var(--line);padding:11px 12px;font-size:12.5px;margin-bottom:18px}
+#import-glb{margin-bottom:18px}
+.projects-section{padding-bottom:17px;margin-bottom:17px;border-bottom:1px solid var(--line)}
+.projects-section .section-title{gap:6px}.project-new{color:var(--blue);font-size:11.25px;padding:7px 9px;border-radius:35px;background:#eef3ff}
+.project-list{display:flex;flex-direction:column;gap:6px;max-height:185px;overflow:auto;scrollbar-width:none}.project-list::-webkit-scrollbar{display:none}
+.project-row{display:flex;align-items:center;gap:3px;border-radius:35px;padding:4px;background:#f5f6f1}.project-row.active{background:#eaf0e4;box-shadow:inset 0 0 0 1px #c9d4bf}
+.project-open{flex:1;min-width:0;text-align:left;padding:7px 9px;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.project-menu{position:relative}.project-menu summary{list-style:none;cursor:pointer;padding:5px 9px;border-radius:35px}.project-menu summary::-webkit-details-marker{display:none}.project-menu[open]{background:#fff;border-radius:15px}.project-menu button{display:block;font-size:11.25px;padding:7px 10px;width:100%;text-align:left}.project-menu button:hover{background:#f0f1ec;border-radius:35px}
+#project-save-status{display:block;margin-top:9px;color:#929b86;font-size:10px;line-height:1.5}
+@media(max-width:640px){.left-panel,.right-panel{overflow:auto;max-height:75vh;margin-top:12px}.project-list{max-height:150px}}

@@ -3,7 +3,7 @@ export const SPACE='microsoft/TRELLIS.2';
 export const SPACE_URL='https://huggingface.co/spaces/microsoft/TRELLIS.2';
 export const QUALITY={draft:{resolution:'512',faces:100000,texture:1024},balanced:{resolution:'1024',faces:300000,texture:2048},detailed:{resolution:'1536',faces:500000,texture:4096}};
 // Keep all stages on the same session: extraction uses the server-side latent state.
-export async function generateMesh({image,token='',detail='balanced',signal,onProgress=()=>{},connect=Client.connect,file=handle_file,fetcher=fetch}){
+export async function generateMesh({image,token='',detail='balanced',signal,onProgress=()=>{},connect=(...args)=>Client.connect(...args),file=handle_file,fetcher=fetch}){
   let client;signal?.throwIfAborted();
   try{
     onProgress('Connecting to TRELLIS','Waiting for the free Hugging Face GPU service…',10);

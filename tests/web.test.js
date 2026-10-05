@@ -151,3 +151,24 @@ test('review capture restores renderer and leaves model materials untouched, eve
   assert.equal(captureReview(renderer,root,null,canvas),'data:image/jpeg;base64,fixture');assert.equal(renders,4);assert.equal(ratio,2);assert.deepEqual(size.toArray(),[700,400]);assert.equal(renderer.toneMappingExposure,1.7);assert.equal(root.visible,false);assert.ok(material.wireframe);
   renderer.render=()=>{throw new Error('GPU failure');};assert.throws(()=>captureReview(renderer,root,null,canvas),/GPU failure/);assert.equal(ratio,2);assert.deepEqual(size.toArray(),[700,400]);assert.equal(renderer.toneMappingExposure,1.7);
 });
+
+test('extruded outlines preserve real holes rather than covering openings',async()=>{
+  const THREE=await import('three');const spec=structuredClone(examples.chair);const c=spec.components[0];
+  c.primitive='extrude';c.params=[.2,0];c.points=[[-1,-1,0],[1,-1,0],[1,1,0],[-1,1,0]];c.holes=[{points:[[-.4,-.4,0],[-.4,.4,0],[.4,.4,0],[.4,-.4,0]]}];c.position=[0,0,0];c.rotation=[0,0,0];c.scale=[1,1,1];delete c.parentId;
+  validateScene(spec);const mesh=buildModel(spec).nodes.get(c.id);mesh.updateMatrixWorld(true);
+  const ray=new THREE.Raycaster(new THREE.Vector3(0,0,2),new THREE.Vector3(0,0,-1));assert.equal(ray.intersectObject(mesh,false).length,0,'opening must be empty');
+  ray.ray.origin.x=.8;assert.ok(ray.intersectObject(mesh,false).length>0,'frame wall must remain solid');
+  c.holes[0].points=[];assert.throws(()=>validateScene(spec),/hole outline/);
+});
+test('material microstructure produces repeatable linear normal and roughness maps',async()=>{
+  const THREE=await import('three');const {materialDetail}=await import('../src/material-detail.js');
+  const a=materialDetail({kind:'wood',scale:4,strength:.3},.6),b=materialDetail({kind:'wood',scale:4,strength:.3},.6);
+  assert.deepEqual(a.normalMap.image.data,b.normalMap.image.data);assert.equal(a.normalMap.colorSpace,THREE.NoColorSpace);assert.equal(a.roughnessMap.colorSpace,THREE.NoColorSpace);assert.equal(a.normalMap.wrapS,THREE.RepeatWrapping);assert.equal(a.normalMap.repeat.x,4);
+  assert.ok(a.normalMap.image.data.some((v,i)=>i%4===0&&v!==128));assert.ok(a.roughnessMap.image.data.some((v,i)=>i%4===1&&v<255));assert.deepEqual(materialDetail(null,.6),{});
+});
+
+test('TRELLIS default connection preserves the Gradio Client class binding',async()=>{
+  const {Client}=await import('@gradio/client');const {generateMesh}=await import('../src/trellis.js');const original=Client.connect;let connected=false;
+  Client.connect=async function(){assert.equal(this,Client);connected=true;throw new Error('fixture stops before network');};
+  try{await assert.rejects(()=>generateMesh({image:new Blob(['fixture'])}),/fixture stops before network/);assert.ok(connected);}finally{Client.connect=original;}
+});

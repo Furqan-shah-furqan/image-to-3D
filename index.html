@@ -12,12 +12,13 @@
   <div id="app">
     <header class="topbar">
       <a class="brand" href="/" aria-label="Forma home"><span class="brand-mark"><i data-lucide="box"></i></span>forma<span class="brand-dot">.</span><span class="studio-label">3D STUDIO</span></a>
-      <div class="project-title"><span class="status-dot"></span>Untitled workspace <span class="pill">Personal</span></div>
+      <div class="project-title"><span class="status-dot"></span><span id="active-project-name">Untitled workspace</span> <span class="pill">Personal</span></div>
       <div class="header-actions"><a class="icon-button source-link" href="https://github.com/Furqan-shah-furqan/image-to-3D" target="_blank" rel="noopener" title="View source" aria-label="View GitHub source"><i data-lucide="github"></i></a><button id="key-button" class="key-button"><i data-lucide="key-round"></i><span id="key-label">Add API key</span><span id="key-dot" class="key-dot"></span></button><span class="avatar">FS</span></div>
     </header>
     <main class="workspace">
       <aside class="left-panel panel">
         <div class="panel-heading"><div><span class="eyebrow">YOUR WORKSPACE</span><h2>Image to 3D</h2></div><span class="mini-icon"><i data-lucide="scan"></i></span></div>
+        <section class="projects-section" aria-label="Projects"><div class="section-title">Projects <button id="new-project" class="project-new" type="button">+ New Project</button></div><div id="project-list" class="project-list"></div><small id="project-save-status" role="status">Projects are saved on this device.</small></section>
         <div class="tabs"><button class="tab active" data-left-tab="reference">Reference</button><button class="tab" data-left-tab="scene">Scene</button></div>
         <section id="reference-tab">
           <label class="field-label" for="generation-engine">Generation engine</label>

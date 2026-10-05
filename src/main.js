@@ -6,10 +6,12 @@ import {GLTFExporter} from 'three/addons/exporters/GLTFExporter.js';
 import {createIcons,Box,KeyRound,Github,Scan,ImagePlus,RefreshCw,X,Sparkles,ArrowUpRight,ArrowRight,Info,ScanEye,Columns2,Camera,Maximize,MousePointer2,Minus,Plus,SlidersHorizontal,Diamond,WandSparkles,Download,ShieldCheck,PlugZap,Eye,Layers3,Circle} from 'lucide';
 import {generateMesh} from './trellis.js';
 import {loadMesh,configureTextureQuality} from './mesh.js';
+import {createProjectStore} from './projects.js';
 import {captureReview} from './review-render.js';
 import {buildModel} from './model.js';
 import modelSource from './model.js?raw';
 import surfaceSource from './surface.js?raw';
+import detailSource from './material-detail.js?raw';
 import {examples} from './examples.js';
 import {validateScene} from '../lib/scene-spec.js';
 
@@ -53,15 +55,15 @@ const canvas=$('scene-canvas');let renderer,scene,camera,controls,ground,grid,ke
 try{
   renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false,preserveDrawingBuffer:true});
   renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
-  renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.15;
+  renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1;
   scene=new THREE.Scene();scene.background=new THREE.Color('#f6f5f2');
   const pmrem=new THREE.PMREMGenerator(renderer),room=new RoomEnvironment();
   scene.environment=pmrem.fromScene(room,.04).texture;room.dispose();pmrem.dispose();
   camera=new THREE.PerspectiveCamera(38,1,.01,100);camera.position.set(4,3.2,5);
   controls=new OrbitControls(camera,canvas);controls.enableDamping=true;controls.dampingFactor=.07;controls.autoRotateSpeed=1.5;controls.minDistance=.5;controls.maxDistance=25;controls.maxPolarAngle=Math.PI*.51;controls.target.set(0,1.1,0);
-  scene.add(new THREE.HemisphereLight('#fff9ee','#92816a',2));
-  keyLight=new THREE.DirectionalLight('#fff8ed',3.5);keyLight.position.set(3,6,4);keyLight.castShadow=true;keyLight.shadow.mapSize.set(2048,2048);keyLight.shadow.camera.left=-5;keyLight.shadow.camera.right=5;keyLight.shadow.camera.top=5;keyLight.shadow.camera.bottom=-5;keyLight.shadow.normalBias=.03;scene.add(keyLight);
-  fillLight=new THREE.DirectionalLight('#ecf0ff',1.3);fillLight.position.set(-3,3,-2);scene.add(fillLight);
+  scene.add(new THREE.HemisphereLight('#ffffff','#888888',.6));
+  keyLight=new THREE.DirectionalLight('#ffffff',2.5);keyLight.position.set(3,6,4);keyLight.castShadow=true;keyLight.shadow.mapSize.set(2048,2048);keyLight.shadow.camera.left=-5;keyLight.shadow.camera.right=5;keyLight.shadow.camera.top=5;keyLight.shadow.camera.bottom=-5;keyLight.shadow.normalBias=.03;scene.add(keyLight);
+  fillLight=new THREE.DirectionalLight('#ffffff',.7);fillLight.position.set(-3,3,-2);scene.add(fillLight);
   ground=new THREE.Mesh(new THREE.PlaneGeometry(200,200),new THREE.ShadowMaterial({opacity:.1}));ground.rotation.x=-Math.PI/2;ground.position.y=-.009;ground.receiveShadow=true;scene.add(ground);
   grid=new THREE.GridHelper(16,40,'#d6dbd0','#e1e5db');grid.material.transparent=true;grid.material.opacity=.28;grid.position.y=-.015;scene.add(grid);
   const resize=()=>{const {width,height}=$('render-pane').getBoundingClientRect();if(width<1||height<1)return;renderer.setSize(width,height,false);camera.aspect=width/height;camera.updateProjectionMatrix();};
@@ -97,7 +99,7 @@ function refreshScene(){
 function showSpec(spec,generated=false){
   validateScene(spec);let viewer;
   if(!renderUnavailable){
-    viewer=buildModel(spec);
+    viewer=buildModel(spec);configureTextureQuality(viewer,renderer.capabilities.getMaxAnisotropy());
     const box=new THREE.Box3().setFromObject(viewer.root),size=box.getSize(new THREE.Vector3()),center=box.getCenter(new THREE.Vector3());
     const factor=2.8/Math.max(size.x,size.y,size.z,.001);viewer.root.scale.setScalar(factor);viewer.root.position.set(-center.x*factor,-box.min.y*factor,-center.z*factor);
     if(state.viewer){scene.remove(state.viewer.root);disposeModel(state.viewer);}scene.add(viewer.root);
@@ -129,16 +131,16 @@ showSpec(structuredClone(examples.chair));
 function updateMaterial(property,value){if(!state.viewer)return;const m=state.spec.materials.find(m=>m.id===state.selectedMaterial);m[property]=value;const material=state.viewer.materials.get(m.id);if(property==='color'){material.color.set(value);document.querySelector(`.material-swatch.active span`)?.style.setProperty('--swatch',value);}else{material[property]=value;$(property+'-value').textContent=value.toFixed(2);}material.needsUpdate=true;}
 $('material-color').oninput=()=>updateMaterial('color',$('material-color').value);
 $('roughness').oninput=()=>updateMaterial('roughness',Number($('roughness').value));$('metalness').oninput=()=>updateMaterial('metalness',Number($('metalness').value));
-function background(color){if(!scene)return;scene.background.set(color);$('render-pane').style.background=color;$('viewport').style.background=color;document.querySelectorAll('.background-swatch').forEach(b=>b.classList.toggle('active',b.dataset.bg===color));}
+function background(color){if(!scene)return;scene.background.set(color);$('render-pane').style.background=color;document.querySelector('.viewport').style.background=color;document.querySelectorAll('.background-swatch').forEach(b=>b.classList.toggle('active',b.dataset.bg===color));}
 document.querySelectorAll('[data-bg]').forEach(b=>b.onclick=()=>background(b.dataset.bg));$('background-color').oninput=()=>background($('background-color').value);
-$('light-intensity').oninput=()=>{const v=Number($('light-intensity').value);if(keyLight){keyLight.intensity=3.5*v;fillLight.intensity=1.3*v;}$('light-value').textContent=`${Math.round(v*100)}%`;};
+$('light-intensity').oninput=()=>{const v=Number($('light-intensity').value);if(keyLight){keyLight.intensity=2.5*v;fillLight.intensity=.7*v;}$('light-value').textContent=`${Math.round(v*100)}%`;};
 $('grid-toggle').onchange=()=>{if(grid)grid.visible=$('grid-toggle').checked;};$('rotate-toggle').onchange=()=>{if(controls)controls.autoRotate=$('rotate-toggle').checked;};
 $('wireframe-toggle').onchange=()=>{state.viewer?.materials.forEach(m=>m.wireframe=$('wireframe-toggle').checked);};
 document.querySelectorAll('[data-camera]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-camera]').forEach(n=>n.classList.toggle('active',n===b));if(!camera)return;frameModel(b.dataset.camera==='front');if(b.dataset.camera==='top'){camera.position.copy(controls.target).add(new THREE.Vector3(0,state.frameDistance,.001));controls.update();}});
 $('reset-camera').onclick=()=>{frameModel();document.querySelectorAll('[data-camera]').forEach(b=>b.classList.toggle('active',b.dataset.camera==='perspective'));};
 function zoom(factor){if(!camera)return;camera.position.sub(controls.target).multiplyScalar(factor).add(controls.target);controls.update();}
 $('zoom-out').onclick=()=>zoom(1.2);$('zoom-in').onclick=()=>zoom(.8);
-$('fullscreen-button').onclick=()=>{if(!document.fullscreenElement)$('viewport').requestFullscreen?.().catch(()=>toast('Fullscreen is unavailable in this browser.',true));else document.exitFullscreen?.();};
+$('fullscreen-button').onclick=()=>{if(!document.fullscreenElement)document.querySelector('.viewport').requestFullscreen?.().catch(()=>toast('Fullscreen is unavailable in this browser.',true));else document.exitFullscreen?.();};
 document.querySelectorAll('[data-left-tab]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-left-tab]').forEach(n=>n.classList.toggle('active',n===b));$('reference-tab').hidden=b.dataset.leftTab!=='reference';$('scene-tab').hidden=b.dataset.leftTab!=='scene';});
 document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-view]').forEach(n=>n.classList.toggle('active',n===b));$('compare-reference').hidden=b.dataset.view!=='compare';$('intro-copy').hidden=state.generated||b.dataset.view==='compare';});
 document.querySelectorAll('[data-detail]').forEach(b=>b.onclick=()=>{state.detail=b.dataset.detail;document.querySelectorAll('[data-detail]').forEach(n=>n.classList.toggle('active',n===b));});
@@ -153,7 +155,7 @@ async function compressedImage(file,maxEdge=1280,maxLength=2200000){
     const png=c.toDataURL('image/png');let encoded=png;for(const quality of [.94,.9,.88]){if(encoded.length<=maxLength)break;encoded=c.toDataURL('image/jpeg',quality);}if(encoded.length>maxLength)throw new Error('This image is too detailed to upload. Resize it and try again.');return encoded;
   }finally{image.close();}
 }
-async function upload(file){if(state.busy)return toast('Finish or cancel the current generation first.',true);if(!file)return;try{state.image=await compressedImage(file);state.originalImage=file;state.file=file.name;$('reference-image').src=state.image;$('compare-image').src=state.image;$('reference-image').hidden=false;$('compare-image').hidden=false;$('compare-empty').hidden=true;$('upload-empty').hidden=true;$('replace-image').hidden=false;$('file-info').hidden=false;$('file-name').textContent=file.name;$('refine-button').disabled=state.assetKind==='mesh'||!state.generated||renderUnavailable;toast('Reference added. Ready when you are.');}catch(error){toast(error.message,true);}$('image-input').value='';}
+async function upload(file){if(state.busy)return toast('Finish or cancel the current generation first.',true);if(!file)return;state.uploading=true;try{state.image=await compressedImage(file);state.originalImage=file;state.file=file.name;$('reference-image').src=state.image;$('compare-image').src=state.image;$('reference-image').hidden=false;$('compare-image').hidden=false;$('compare-empty').hidden=true;$('upload-empty').hidden=true;$('replace-image').hidden=false;$('file-info').hidden=false;$('file-name').textContent=file.name;$('refine-button').disabled=state.assetKind==='mesh'||!state.generated||renderUnavailable;toast('Reference added. Ready when you are.');}catch(error){toast(error.message,true);}state.uploading=false;scheduleProjectSave();$('image-input').value='';}
 $('image-input').onchange=()=>upload($('image-input').files[0]);
 $('drop-zone').onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();$('image-input').click();}};
 $('drop-zone').ondragover=event=>{event.preventDefault();$('drop-zone').classList.add('dragging');};$('drop-zone').ondragleave=()=>$('drop-zone').classList.remove('dragging');$('drop-zone').ondrop=event=>{event.preventDefault();$('drop-zone').classList.remove('dragging');upload(event.dataTransfer.files[0]);};
@@ -187,11 +189,14 @@ function progress(title,description,percentage){$('progress-title').textContent=
 function setBusy(busy){
   state.busy=busy;$('add-angles').disabled=busy;$('angle-input').disabled=busy;$('generation-overlay').hidden=!busy;$('generate-button').disabled=busy;$('generation-engine').disabled=busy;$('import-glb').disabled=busy;$('refine-button').disabled=busy||state.assetKind==='mesh'||!state.generated||!state.image||renderUnavailable;$('cancel-button').hidden=!busy;$('image-input').disabled=busy;
   document.querySelectorAll('.example-card').forEach(b=>b.disabled=busy);$('export-button').disabled=busy||(renderUnavailable&&state.assetKind!=='mesh');
+  $('new-project').disabled=busy;document.querySelectorAll('#project-list button,#project-list summary').forEach(b=>{if('disabled' in b)b.disabled=busy;});
+  if(!busy)scheduleProjectSave();
   clearInterval(elapsedTimer);if(busy){startTime=Date.now();$('elapsed').textContent='0s elapsed';elapsedTimer=setInterval(()=>$('elapsed').textContent=`${Math.floor((Date.now()-startTime)/1000)}s elapsed`,1000);}
 }
 function requestBody(prompt,current,render){return {image:state.image,extraImages:state.extraImages.map(r=>r.image),prompt,detail:state.detail,model:state.model,...(current?{current,render}:{})};}
 async function generate(refinement){
   if(state.busy)return;
+  if(state.uploading)return toast('Wait for the image to finish loading.',true);
   if(!refinement && $('generation-engine').value==='trellis')return generateTextured();
   if(state.refsLoading)return toast('Wait for the reference angles to finish loading.',true);
   if(!state.key){openKey();return;}
@@ -256,18 +261,18 @@ $('generate-button').onclick=()=>generate();$('cancel-button').onclick=()=>state
 $('refine-button').onclick=()=>{if(!state.key){openKey();return;}$('refine-dialog').showModal();};
 $('refine-form').onsubmit=event=>{event.preventDefault();const prompt=$('refine-prompt').value.trim();if(!prompt)return;$('refine-dialog').close();generate(prompt);};
 function download(data,name,type){const blob=data instanceof Blob?data:new Blob([data],{type});const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=name;link.click();setTimeout(()=>URL.revokeObjectURL(url),5000);}
-function filename(){return state.spec.title.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') || 'model';}
+function filename(){return (state.spec?.title || 'model').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') || 'model';}
 $('export-button').onclick=async()=>{
   if(!state.viewer)return;try{
     const format=$('export-format').value,slug=filename();
     if(format==='json')download(JSON.stringify(state.spec,null,2),`${slug}.json`,'application/json');
-    else if(format==='js')download(`${modelSource.replace("import {applySurface,foldedPatch} from './surface.js';",surfaceSource.replace("import * as THREE from 'three';",''))}\n\nexport const spec = ${JSON.stringify(state.spec,null,2)};\nexport default buildModel(spec).root;\n`,`${slug}.js`,'text/javascript');
+    else if(format==='js')download(`${modelSource.replace("import {materialDetail} from './material-detail.js';",detailSource.replace("import * as THREE from 'three';",'')).replace("import {applySurface,foldedPatch} from './surface.js';",surfaceSource.replace("import * as THREE from 'three';",''))}\n\nexport const spec = ${JSON.stringify(state.spec,null,2)};\nexport default buildModel(spec).root;\n`,`${slug}.js`,'text/javascript');
     else{const result=await new GLTFExporter().parseAsync(state.viewer.root,{binary:true,onlyVisible:true});download(result,`${slug}.glb`,'model/gltf-binary');}
     toast('Model exported. Make something with it.');
   }catch(error){toast(`Export failed: ${error.message}`,true);}
 };
 $('screenshot-button').onclick=()=>{if(!renderer)return;renderer.render(scene,camera);canvas.toBlob(blob=>{if(blob)download(blob,`${filename()}.png`);},'image/png');};
-document.querySelectorAll('[data-example]').forEach(b=>b.onclick=()=>{if(state.busy)return;showSpec(structuredClone(examples[b.dataset.example]));document.querySelectorAll('[data-example]').forEach(n=>n.classList.toggle('active',n===b));});
+document.querySelectorAll('[data-example]').forEach(b=>b.onclick=()=>{if(state.busy)return;showSpec(structuredClone(examples[b.dataset.example]));scheduleProjectSave();document.querySelectorAll('[data-example]').forEach(n=>n.classList.toggle('active',n===b));});
 
 // Real thumbnails rendered from the example geometry, not placeholder image assets.
 async function thumbnails(){
@@ -282,3 +287,73 @@ async function thumbnails(){
   catch{toast('Example thumbnails could not render. The main viewer is still available.',true);}finally{miniEnvironment.dispose();mini.dispose();}
 }
 thumbnails();
+
+
+// Project snapshots intentionally whitelist workspace data. API keys stay session-only.
+const projectStore=createProjectStore();let activeProject=null,projectReady=false,projectLoading=false,projectActionPending=false,projectSaveTimer,saveTail=Promise.resolve();
+function captureProject(){
+  return {spec:state.spec?structuredClone(state.spec):null,assetKind:state.assetKind,meshBuffer:state.meshBuffer || null,generated:state.generated,image:state.image,originalImage:state.originalImage || null,file:state.file,extraImages:structuredClone(state.extraImages),detail:state.detail,engine:$('generation-engine').value,prompt:$('prompt').value,review:$('review-option').checked,
+    meshMaterials:state.assetKind==='mesh'?state.spec.materials.map(m=>({color:m.color,roughness:m.roughness,metalness:m.metalness})):null,
+    visibility:state.viewer?[...state.viewer.nodes.values()].map(n=>n.visible):[],
+    camera:camera?{position:camera.position.toArray(),target:controls.target.toArray()}:null,
+    stage:{background:scene?`#${scene.background.getHexString()}`:'#f6f5f2',light:$('light-intensity').value,grid:$('grid-toggle').checked,rotate:$('rotate-toggle').checked,wireframe:$('wireframe-toggle').checked},source:$('model-source').textContent,notes:$('model-notes').textContent};
+}
+async function refreshProjects(){
+  const list=await projectStore.list();$('project-list').replaceChildren();
+  for(const p of list){const row=document.createElement('div');row.className='project-row'+(p.id===activeProject?.id?' active':'');
+    const open=document.createElement('button');open.className='project-open';open.textContent=p.name;open.title=p.name;open.setAttribute('aria-current',String(p.id===activeProject?.id));open.onclick=()=>projectAction('open',p.id);
+    const menu=document.createElement('details');menu.className='project-menu';const summary=document.createElement('summary');summary.textContent='⋯';summary.setAttribute('aria-label',`Actions for ${p.name}`);menu.append(summary);
+    for(const [action,label] of [['rename','Rename'],['duplicate','Duplicate'],['delete','Delete']]){const b=document.createElement('button');b.textContent=label;b.onclick=()=>{menu.open=false;projectAction(action,p.id);};menu.append(b);}row.append(open,menu);$('project-list').append(row);
+  }
+  $('active-project-name').textContent=activeProject?.name || 'Untitled workspace';
+}
+async function saveProject(){
+  clearTimeout(projectSaveTimer);if(!projectReady||projectLoading||!activeProject)return;
+  const record={id:activeProject.id,name:activeProject.name,updatedAt:Date.now(),snapshot:captureProject()};$('project-save-status').textContent='Saving…';
+  const write=saveTail.catch(()=>{}).then(()=>projectStore.put(record));saveTail=write;
+  try{await write;$('project-save-status').textContent='Saved on this device';await refreshProjects();}catch(error){$('project-save-status').textContent='Save failed — keep this tab open and export your model.';throw error;}
+}
+function scheduleProjectSave(){if(!projectReady||projectLoading||state.busy)return;clearTimeout(projectSaveTimer);projectSaveTimer=setTimeout(()=>saveProject().catch(error=>toast(`Project save failed: ${error.message}`,true)),650);}
+function blankSnapshot(){return {spec:null,assetKind:'procedural',generated:false,image:null,file:null,extraImages:[],detail:'balanced',engine:'trellis',prompt:'',review:true,stage:{background:'#f6f5f2',light:'1',grid:true,rotate:false,wireframe:false}};}
+async function restoreProject(snapshot){
+  state.image=snapshot.image;state.originalImage=snapshot.originalImage || null;state.file=snapshot.file;state.extraImages=snapshot.extraImages || [];state.detail=snapshot.detail || 'balanced';
+  $('generation-engine').value=snapshot.engine || 'trellis';engineUI();$('prompt').value=snapshot.prompt || '';$('review-option').checked=snapshot.review ?? true;
+  document.querySelectorAll('[data-detail]').forEach(b=>b.classList.toggle('active',b.dataset.detail===state.detail));
+  const hasImage=!!state.image;for(const id of ['reference-image','compare-image']){$(id).hidden=!hasImage;if(hasImage)$(id).src=state.image;else $(id).removeAttribute('src');}
+  $('upload-empty').hidden=hasImage;$('compare-empty').hidden=hasImage;$('replace-image').hidden=!hasImage;$('file-info').hidden=!hasImage;$('file-name').textContent=state.file || '';renderAngles();
+  if(snapshot.assetKind==='mesh' && snapshot.meshBuffer){await showMesh(snapshot.meshBuffer,snapshot.spec.title,snapshot.source || 'Imported GLB');
+    snapshot.meshMaterials?.forEach((values,i)=>{const spec=state.spec.materials[i],m=spec&&state.viewer.materials.get(spec.id);if(m){Object.assign(spec,values);m.color?.set(values.color);m.roughness=values.roughness;m.metalness=values.metalness;}});refreshMaterials();
+  }else if(snapshot.spec)showSpec(structuredClone(snapshot.spec),snapshot.generated);
+  else {if(state.viewer){scene?.remove(state.viewer.root);disposeModel(state.viewer);}state.viewer=null;state.spec=null;state.meshBuffer=null;state.generated=false;state.assetKind='procedural';assetExportOptions(false);$('material-swatches').replaceChildren();$('material-count').textContent='0';$('scene-list').replaceChildren();$('scene-count').textContent='No model yet';$('model-title').textContent='New project';$('model-notes').textContent='Upload a reference image to begin.';$('model-source').textContent='—';$('polygon-count').textContent='—';$('intro-copy').hidden=false;$('demo-badge').textContent='New project · ready to create';$('model-status').textContent='Ready for your reference';}
+  const stage=snapshot.stage || blankSnapshot().stage;background(stage.background);$('background-color').value=stage.background;$('light-intensity').value=stage.light;$('light-intensity').oninput();
+  for(const [id,value] of [['grid-toggle',stage.grid],['rotate-toggle',stage.rotate],['wireframe-toggle',stage.wireframe]]){$(id).checked=value;$(id).onchange();}
+  if(state.viewer && snapshot.visibility)[...state.viewer.nodes.values()].forEach((node,i)=>node.visible=snapshot.visibility[i]??true);
+  if(state.viewer)refreshScene();if(camera&&snapshot.camera){camera.position.fromArray(snapshot.camera.position);controls.target.fromArray(snapshot.camera.target);controls.update();}
+  if(snapshot.spec){$('model-source').textContent=snapshot.source || $('model-source').textContent;$('model-notes').textContent=snapshot.notes || $('model-notes').textContent;}
+  document.querySelectorAll('[data-example]').forEach(b=>b.classList.remove('active'));$('refine-button').disabled=!state.generated||state.assetKind==='mesh'||!state.image||renderUnavailable;$('export-button').disabled=!state.viewer;
+}
+async function projectAction(action,id){
+  if(state.busy||projectLoading||projectActionPending||state.refsLoading||state.uploading||!projectReady)return;
+  projectActionPending=true;setBusy(true);
+  try{
+    await saveProject();projectLoading=true;setBusy(true);progress('Opening project','Restoring your model and references…',40);
+    let record=id?await projectStore.get(id):null;
+    if(action==='rename'){const name=window.prompt('Project name',record.name);if(name===null)return;record.name=name.trim().slice(0,80)||record.name;record.updatedAt=Date.now();await projectStore.put(record);if(id===activeProject.id)activeProject.name=record.name;}
+    else if(action==='delete'){if(!window.confirm(`Delete “${record.name}” from this device?`))return;await projectStore.remove(id);if(id===activeProject.id){const remaining=await projectStore.list();record=remaining.length?await projectStore.get(remaining[0].id):{id:crypto.randomUUID(),name:'Untitled project',updatedAt:Date.now(),snapshot:blankSnapshot()};await projectStore.put(record);await restoreProject(record.snapshot);activeProject={id:record.id,name:record.name};}}
+    else {if(action==='new'||action==='duplicate'){record={id:crypto.randomUUID(),name:action==='duplicate'?`${record.name} copy`:'Untitled project',updatedAt:Date.now(),snapshot:action==='duplicate'?structuredClone(record.snapshot):blankSnapshot()};await projectStore.put(record);}if(!record)throw new Error('Project was not found.');await restoreProject(record.snapshot);activeProject={id:record.id,name:record.name};}
+    try{localStorage.setItem('forma-active-project',activeProject.id);}catch{}await refreshProjects();
+  }catch(error){toast(`Project could not be updated: ${error.message}`,true);}
+  finally{projectLoading=false;projectActionPending=false;setBusy(false);$('export-button').disabled=!state.viewer;}
+}
+$('new-project').onclick=()=>projectAction('new');
+document.addEventListener('input',event=>{if(!event.target.closest('dialog'))scheduleProjectSave();});
+document.addEventListener('change',event=>{if(!event.target.closest('dialog'))scheduleProjectSave();});
+document.addEventListener('click',event=>{if(!event.target.closest('#project-list,dialog,#new-project'))scheduleProjectSave();});
+controls?.addEventListener('end',scheduleProjectSave);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&!state.busy)saveProject().catch(()=>{});});
+(async()=>{try{
+  const list=await projectStore.list();let id;try{id=localStorage.getItem('forma-active-project');}catch{}
+  const first=list.find(p=>p.id===id)||list[0];
+  if(first){projectLoading=true;const record=await projectStore.get(first.id);await restoreProject(record.snapshot);activeProject={id:record.id,name:record.name};}
+  else{activeProject={id:crypto.randomUUID(),name:'Untitled project'};await projectStore.put({...activeProject,updatedAt:Date.now(),snapshot:captureProject()});}
+  projectReady=true;projectLoading=false;await refreshProjects();$('project-save-status').textContent='Saved on this device';
+}catch(error){projectLoading=false;$('project-save-status').textContent='Project storage unavailable';$('new-project').disabled=true;toast(`Local project storage could not open: ${error.message}`,true);}})();

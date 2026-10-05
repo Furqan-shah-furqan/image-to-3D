@@ -83,3 +83,9 @@ The top-right key button opens settings for the selected engine. A Hugging Face 
 GLB import preserves UVs, embedded PBR textures (including TRELLIS WebP) and materials. Stage, camera, material and wireframe controls still work. GLB export embeds textures; procedural JSON/JS export and Gemini refinement are disabled for imported/generated meshes. Only self-contained GLB 2.0 files up to 100 MB are accepted; external texture URLs and Draco/KTX2/Meshopt compressed meshes require re-export first. One reference image cannot recover the true hidden surfaces; better output remains an inferred reconstruction. TRELLIS uses the primary image, while Gemini supports the extra reference angles and instructions.
 
 Provider contract and GLB validation tests use fixtures. Live GPU generation requires available Hugging Face quota; it is not asserted by those tests.
+
+## Independent projects
+
+Use **New Project** in the left sidebar. Project menus offer Rename, Duplicate and Delete. Each project autosaves its model, references, settings, material edits and camera locally in this browser using IndexedDB. Switching projects saves the current edits first. Project lists read lightweight metadata, not all stored GLBs. Keys are not stored in projects. Clearing site data removes these local projects; exported GLBs remain portable.
+
+The Gemini scene format also supports extruded cut-outs and optional procedural normal/roughness detail. See `docs/QUALITY_VERIFICATION.md` for exact tests and live-provider limitations.

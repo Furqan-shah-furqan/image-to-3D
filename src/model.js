@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import {materialDetail} from './material-detail.js';
 import {applySurface,foldedPatch} from './surface.js';
 export function buildModel(spec) {
   const root = new THREE.Group(); root.name = spec.title;
   const materials = new Map(spec.materials.map(m => [m.id, new THREE.MeshPhysicalMaterial({
-    name: m.name, color: m.color, roughness: m.roughness, metalness: m.metalness,
+    ...materialDetail(m.detail,m.roughness), name: m.name, color: m.color, roughness: m.roughness, metalness: m.metalness,
     clearcoat: m.clearcoat || 0, opacity: m.opacity ?? 1, transparent: (m.opacity ?? 1) < 1 || (m.transmission || 0) > 0,
     transmission: m.transmission || 0, thickness: .15, side: THREE.DoubleSide, vertexColors: !!m.surface
   })]));
@@ -25,6 +26,7 @@ export function buildModel(spec) {
       case 'tube': geometry = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(c.points.map(q => new THREE.Vector3(...q))), Math.min(256, Math.max(32,c.points.length * 10)), p[0], 16, false); break;
       case 'extrude': {
         const shape = new THREE.Shape(c.points.map(q => new THREE.Vector2(q[0],q[1]))); shape.closePath();
+        for(const hole of c.holes || []){const path=new THREE.Path(hole.points.map(q=>new THREE.Vector2(q[0],q[1])));path.closePath();shape.holes.push(path);}
         const bevel = Math.min(p[1] || 0, p[0]/3);
         geometry = new THREE.ExtrudeGeometry(shape, { depth:p[0], bevelEnabled:bevel > 0, bevelThickness:bevel, bevelSize:bevel, bevelSegments:3, steps:1 });
         break;
