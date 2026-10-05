@@ -1,6 +1,6 @@
 # Forma — Image to 3D Studio
 
-A Vercel-ready image-to-3D workspace built for Furqan Shah. Upload an image, connect your own Gemini API key, generate an approximate procedural 3D reconstruction, refine it against a rendered preview, and export a GLB, editable JSON, or self-contained Three.js module.
+A Vercel-ready image-to-3D workspace built for Furqan Shah. Upload an image to TRELLIS.2 for a textured mesh, import an existing textured GLB, or use Gemini for an editable procedural reconstruction.
 
 The full [img2threejs](https://github.com/img2threejs/img2threejs) toolkit is imported alongside this web app. The original README is preserved in [docs/UPSTREAM_README.md](docs/UPSTREAM_README.md). Imported source commit: `6e60b5e22419464b4853e01ddb6c0e6f6659a733`.
 
@@ -72,3 +72,14 @@ The visual theme is inspired by the two supplied studio references: warm off-whi
 ## Attribution and license
 
 Upstream img2threejs is licensed under Apache-2.0; its `LICENSE`, notices and original documentation are retained. Added application code is also Apache-2.0. See [THIRD_PARTY.md](THIRD_PARTY.md).
+
+
+## Textured mesh generation
+
+TRELLIS is the default engine. Upload one JPG, PNG or WebP (transparent PNGs preserve their alpha), choose detail and click Generate. The app calls Microsoft’s public Hugging Face TRELLIS.2 demo using the official Gradio client: session → background removal → shape/texture generation → GLB extraction. The same session retains latent state between stages. Draft uses 512 resolution / 100k faces / 1024px textures; Balanced 1024 / 300k / 2048px; Detailed 1536 / 500k / 4096px. This GPU workload runs on Hugging Face, outside Vercel function time limits.
+
+The top-right key button opens settings for the selected engine. A Hugging Face token is optional and stored only in tab session storage; it is sent directly to Hugging Face. Gemini keys cannot authenticate TRELLIS. The public demo has queues, daily GPU quotas and possible API restrictions; availability is not guaranteed. No paid fallback is selected. If unavailable, use **Open free TRELLIS demo**, Generate, Extract GLB, Download, then **Import textured GLB** here.
+
+GLB import preserves UVs, embedded PBR textures (including TRELLIS WebP) and materials. Stage, camera, material and wireframe controls still work. GLB export embeds textures; procedural JSON/JS export and Gemini refinement are disabled for imported/generated meshes. Only self-contained GLB 2.0 files up to 100 MB are accepted; external texture URLs and Draco/KTX2/Meshopt compressed meshes require re-export first. One reference image cannot recover the true hidden surfaces; better output remains an inferred reconstruction. TRELLIS uses the primary image, while Gemini supports the extra reference angles and instructions.
+
+Provider contract and GLB validation tests use fixtures. Live GPU generation requires available Hugging Face quota; it is not asserted by those tests.

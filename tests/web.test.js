@@ -95,3 +95,19 @@ test('generation route sends image and upstream-inspired schema, validates resul
     assert.equal(res.statusCode,200);assert.equal(res.data.spec.title,'Studio chair');assert.ok(requested.payload.systemInstruction.parts[0].text.includes('Image Analysis Protocol'));assert.equal(requested.payload.generationConfig.responseMimeType,'application/json');assert.ok(requested.payload.contents[0].parts.some(p=>p.inlineData));
   }finally{globalThis.fetch=original;}
 });
+
+test('TRELLIS keeps its latent session through generation and texture extraction',async()=>{
+  const {generateMesh}=await import('../src/trellis.js');const calls=[];let closed=false;
+  const client={submit(endpoint,payload){calls.push({endpoint,payload});return {async *[Symbol.asyncIterator](){yield {type:'data',data:endpoint==='/preprocess_image'?[{path:'prepared',url:'https://microsoft-trellis-2.hf.space/prepared'}]:endpoint==='/extract_glb'?[{url:'https://microsoft-trellis-2.hf.space/model.glb'}]:[]};},cancel:async()=>{},close_stream(){}};},close(){closed=true;}};
+  const bytes=new Uint8Array([1,2,3]).buffer;
+  const result=await generateMesh({image:new Blob(['image']),token:'hf_test',detail:'detailed',connect:async(_,options)=>{assert.equal(options.hf_token,'hf_test');return client;},file:b=>b,fetcher:async()=>({ok:true,headers:new Headers(),arrayBuffer:async()=>bytes})});
+  assert.deepEqual(calls.map(x=>x.endpoint),['/start_session','/preprocess_image','/image_to_3d','/extract_glb']);assert.equal(calls[2].payload[2],'1536');assert.deepEqual(calls[3].payload,[500000,4096]);assert.equal(result,bytes);assert.ok(closed);
+});
+test('GLB import rejects external resources before loader network requests',async()=>{
+  const {validateGLB}=await import('../src/mesh.js');
+  function glb(json){const text=JSON.stringify(json);const size=Math.ceil(text.length/4)*4,b=new ArrayBuffer(20+size),v=new DataView(b);v.setUint32(0,0x46546c67,true);v.setUint32(4,2,true);v.setUint32(8,b.byteLength,true);v.setUint32(12,size,true);v.setUint32(16,0x4e4f534a,true);new Uint8Array(b,20).fill(32);new Uint8Array(b,20,text.length).set(new TextEncoder().encode(text));return b;}
+  assert.throws(()=>validateGLB(glb({images:[{uri:'https://example.com/texture.png'}]})),/embedded textures/);
+  assert.throws(()=>validateGLB(glb({extensionsRequired:['KHR_draco_mesh_compression']})),/unsupported compression/);
+  assert.throws(()=>validateGLB(new ArrayBuffer(30)),/valid GLB/);
+  assert.equal(validateGLB(glb({asset:{version:'2.0'}})).asset.version,'2.0');
+});

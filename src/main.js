@@ -4,6 +4,8 @@ import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
 import {GLTFExporter} from 'three/addons/exporters/GLTFExporter.js';
 import {createIcons,Box,KeyRound,Github,Scan,ImagePlus,RefreshCw,X,Sparkles,ArrowUpRight,ArrowRight,Info,ScanEye,Columns2,Camera,Maximize,MousePointer2,Minus,Plus,SlidersHorizontal,Diamond,WandSparkles,Download,ShieldCheck,PlugZap,Eye,Layers3,Circle} from 'lucide';
+import {generateMesh} from './trellis.js';
+import {loadMesh} from './mesh.js';
 import {buildModel} from './model.js';
 import modelSource from './model.js?raw';
 import surfaceSource from './surface.js?raw';
@@ -18,7 +20,7 @@ const state={key:'',model:'auto',image:null,file:null,detail:'balanced',spec:nul
 try{state.key=sessionStorage.getItem('forma-key') || '';state.model=sessionStorage.getItem('forma-model') || 'auto';}catch{}
 let toastTimer;
 function toast(message,error=false){clearTimeout(toastTimer);$('toast').textContent=message;$('toast').classList.toggle('error',error);$('toast').hidden=false;toastTimer=setTimeout(()=>$('toast').hidden=true,error?15000:5500);}
-function updateKeyUI(){ $('key-label').textContent=state.key?'API key connected':'Add API key';$('key-dot').style.display=state.key?'block':'none'; }
+function updateKeyUI(){const mesh=$('generation-engine').value==='trellis',connected=mesh?state.hfToken:state.key;$('key-label').textContent=connected?(mesh?'HF token saved':'API key connected'):(mesh?'Add HF token':'Add API key');$('key-dot').style.display=connected?'block':'none';}
 updateKeyUI();
 function openKey(){ $('api-key').value=state.key;$('key-error').textContent='';$('key-dialog').showModal(); }
 $('key-button').onclick=openKey;
@@ -66,7 +68,7 @@ try{
   renderer.setAnimationLoop(()=>{controls.update();renderer.render(scene,camera);const percent=Math.round(state.frameDistance/controls.getDistance()*100);$('zoom-level').textContent=`${percent}%`;});
   canvas.addEventListener('webglcontextlost',event=>{event.preventDefault();toast('3D graphics context lost. Reload this page to restore the viewer.',true);});
 }catch{renderUnavailable=true;$('model-status').textContent='WebGL unavailable';toast('Your browser cannot start the 3D viewer. Enable hardware acceleration or use a WebGL-capable browser.',true);}
-function disposeModel(viewer){if(!viewer)return;viewer.root.traverse(node=>{if(node.geometry)node.geometry.dispose();});viewer.materials.forEach(m=>m.dispose());}
+function disposeModel(viewer){if(!viewer)return;const textures=new Set();viewer.root.traverse(node=>node.geometry?.dispose());viewer.materials.forEach(m=>{for(const v of Object.values(m))if(v?.isTexture)textures.add(v);m.dispose();});textures.forEach(t=>{t.source?.data?.close?.();t.dispose();});}
 function frameModel(front=false){
   if(!state.viewer||!camera)return;
   const bounds=new THREE.Box3().setFromObject(state.viewer.root),size=bounds.getSize(new THREE.Vector3());
@@ -99,7 +101,7 @@ function showSpec(spec,generated=false){
     const factor=2.8/Math.max(size.x,size.y,size.z,.001);viewer.root.scale.setScalar(factor);viewer.root.position.set(-center.x*factor,-box.min.y*factor,-center.z*factor);
     if(state.viewer){scene.remove(state.viewer.root);disposeModel(state.viewer);}scene.add(viewer.root);
   }
-  state.spec=spec;state.viewer=viewer;state.generated=generated;
+  state.meshBuffer=null;state.assetKind='procedural';assetExportOptions(false);state.spec=spec;state.viewer=viewer;state.generated=generated;
   if(viewer){viewer.materials.forEach(m=>m.wireframe=$('wireframe-toggle').checked);frameModel();}
   $('model-title').textContent=spec.title;$('model-notes').textContent=spec.description;$('model-source').textContent=generated?'Gemini':'Example';
   $('demo-badge').textContent=generated?'Generated model · approximate':`Example model · ${spec.title}`;
@@ -108,6 +110,18 @@ function showSpec(spec,generated=false){
   $('polygon-count').textContent=`${Math.round(triangles).toLocaleString()} triangles`;
   refreshMaterials();refreshScene();$('model-status').textContent=renderUnavailable?'WebGL unavailable':generated?'Model ready':'Ready to explore';
   if(generated)document.querySelectorAll('.example-card').forEach(b=>b.classList.remove('active'));
+}
+function assetExportOptions(mesh){$('model-format').textContent=mesh?'Textured GLB':'Procedural 3D';for(const option of $('export-format').options)option.disabled=mesh&&option.value!=='glb';if(mesh)$('export-format').value='glb';}
+async function showMesh(buffer,title,source='Imported GLB'){
+  const viewer=await loadMesh(buffer,title);const box=new THREE.Box3().setFromObject(viewer.root),size=box.getSize(new THREE.Vector3()),center=box.getCenter(new THREE.Vector3());
+  const factor=2.8/Math.max(size.x,size.y,size.z,.001);viewer.root.scale.setScalar(factor);viewer.root.position.set(-center.x*factor,-box.min.y*factor,-center.z*factor);
+  if(state.viewer){scene?.remove(state.viewer.root);disposeModel(state.viewer);}scene?.add(viewer.root);
+  state.meshBuffer=buffer;state.viewer=viewer;state.spec=viewer.spec;state.assetKind='mesh';state.generated=true;assetExportOptions(true);
+  viewer.materials.forEach(m=>m.wireframe=$('wireframe-toggle').checked);frameModel();refreshMaterials();refreshScene();
+  $('model-title').textContent=title;$('model-source').textContent=source;$('model-notes').textContent=viewer.spec.description;
+  $('intro-copy').hidden=true;$('demo-badge').textContent='Textured mesh · embedded textures';$('refine-button').disabled=true;
+  let triangles=0;viewer.root.traverse(n=>{if(n.geometry)triangles+=(n.geometry.index?.count||n.geometry.attributes.position.count)/3;});$('polygon-count').textContent=`${Math.round(triangles).toLocaleString()} triangles`;
+  $('model-status').textContent=renderUnavailable?'Model loaded · WebGL unavailable':'Textured model ready';$('export-button').disabled=false;
 }
 showSpec(structuredClone(examples.chair));
 
@@ -138,7 +152,7 @@ async function compressedImage(file,maxEdge=1280,maxLength=2200000){
     const encoded=c.toDataURL('image/jpeg',.88);if(encoded.length>maxLength)throw new Error('This image is too detailed to upload. Resize it and try again.');return encoded;
   }finally{image.close();}
 }
-async function upload(file){if(state.busy)return toast('Finish or cancel the current generation first.',true);if(!file)return;try{state.image=await compressedImage(file);state.file=file.name;$('reference-image').src=state.image;$('compare-image').src=state.image;$('reference-image').hidden=false;$('compare-image').hidden=false;$('compare-empty').hidden=true;$('upload-empty').hidden=true;$('replace-image').hidden=false;$('file-info').hidden=false;$('file-name').textContent=file.name;$('refine-button').disabled=!state.generated||renderUnavailable;toast('Reference added. Ready when you are.');}catch(error){toast(error.message,true);}$('image-input').value='';}
+async function upload(file){if(state.busy)return toast('Finish or cancel the current generation first.',true);if(!file)return;try{state.image=await compressedImage(file);state.originalImage=file;state.file=file.name;$('reference-image').src=state.image;$('compare-image').src=state.image;$('reference-image').hidden=false;$('compare-image').hidden=false;$('compare-empty').hidden=true;$('upload-empty').hidden=true;$('replace-image').hidden=false;$('file-info').hidden=false;$('file-name').textContent=file.name;$('refine-button').disabled=state.assetKind==='mesh'||!state.generated||renderUnavailable;toast('Reference added. Ready when you are.');}catch(error){toast(error.message,true);}$('image-input').value='';}
 $('image-input').onchange=()=>upload($('image-input').files[0]);
 $('drop-zone').onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();$('image-input').click();}};
 $('drop-zone').ondragover=event=>{event.preventDefault();$('drop-zone').classList.add('dragging');};$('drop-zone').ondragleave=()=>$('drop-zone').classList.remove('dragging');$('drop-zone').ondrop=event=>{event.preventDefault();$('drop-zone').classList.remove('dragging');upload(event.dataTransfer.files[0]);};
@@ -172,18 +186,20 @@ function captureRender(width=900,height=900){
 let elapsedTimer,startTime;
 function progress(title,description,percentage){$('progress-title').textContent=title;$('progress-detail').textContent=description;$('progress-bar').style.width=`${percentage}%`;}
 function setBusy(busy){
-  state.busy=busy;$('add-angles').disabled=busy;$('angle-input').disabled=busy;$('generation-overlay').hidden=!busy;$('generate-button').disabled=busy;$('refine-button').disabled=busy||!state.generated||!state.image||renderUnavailable;$('cancel-button').hidden=!busy;$('image-input').disabled=busy;
-  document.querySelectorAll('.example-card').forEach(b=>b.disabled=busy);$('export-button').disabled=busy||renderUnavailable;
+  state.busy=busy;$('add-angles').disabled=busy;$('angle-input').disabled=busy;$('generation-overlay').hidden=!busy;$('generate-button').disabled=busy;$('generation-engine').disabled=busy;$('import-glb').disabled=busy;$('refine-button').disabled=busy||state.assetKind==='mesh'||!state.generated||!state.image||renderUnavailable;$('cancel-button').hidden=!busy;$('image-input').disabled=busy;
+  document.querySelectorAll('.example-card').forEach(b=>b.disabled=busy);$('export-button').disabled=busy||(renderUnavailable&&state.assetKind!=='mesh');
   clearInterval(elapsedTimer);if(busy){startTime=Date.now();$('elapsed').textContent='0s elapsed';elapsedTimer=setInterval(()=>$('elapsed').textContent=`${Math.floor((Date.now()-startTime)/1000)}s elapsed`,1000);}
 }
 function requestBody(prompt,current,render){return {image:state.image,extraImages:state.extraImages.map(r=>r.image),prompt,detail:state.detail,model:state.model,...(current?{current,render}:{})};}
 async function generate(refinement){
   if(state.busy)return;
+  if(!refinement && $('generation-engine').value==='trellis')return generateTextured();
   if(state.refsLoading)return toast('Wait for the reference angles to finish loading.',true);
   if(!state.key){openKey();return;}
   if(!state.image){toast('Upload a reference image first.',true);$('image-input').click();return;}
   if(renderUnavailable)return toast('A working WebGL viewer is required. Enable hardware acceleration.',true);
   const previous={spec:structuredClone(state.spec),generated:state.generated};
+  if(state.assetKind==='mesh')previous.mesh=state.meshBuffer;
   state.controller=new AbortController();setBusy(true);
   try{
     progress(refinement?'Refining the details':'Reading your reference',refinement?'Matching your requested changes to the current model…':'Finding shapes, proportions and surface finishes…',20);
@@ -212,10 +228,31 @@ async function generate(refinement){
     }else $('model-notes').textContent=`${state.spec.description} ${state.spec.limitations.join(' ')}`;
     $('model-status').textContent='Your model is ready';toast('Your 3D model is ready. Explore, refine or export it.');
   }catch(error){
-    if(state.controller?.signal.aborted){showSpec(previous.spec,previous.generated);toast('Generation cancelled. Your previous model was restored.');}
+    if(state.controller?.signal.aborted){if(previous.mesh)await showMesh(previous.mesh,previous.spec.title);else showSpec(previous.spec,previous.generated);toast('Generation cancelled. Your previous model was restored.');}
     else toast(error.message,true);
   }finally{setBusy(false);state.controller=null;}
 }
+
+state.hfToken='';try{state.hfToken=sessionStorage.getItem('forma-hf-token') || '';}catch{}
+function engineUI(){updateKeyUI();const mesh=$('generation-engine').value==='trellis';$('trellis-options').hidden=!mesh;$('prompt').hidden=mesh;$('prompt').previousElementSibling.hidden=mesh;$('add-angles').hidden=mesh;$('angle-list').hidden=mesh;$('review-option').closest('label').hidden=mesh;}
+$('generation-engine').onchange=engineUI;engineUI();
+function hfSettings(){$('hf-token').value=state.hfToken;$('hf-dialog').showModal();}
+$('hf-settings').onclick=hfSettings;
+// The top-right key button opens settings for the selected generation engine.
+$('key-button').onclick=()=>{$('generation-engine').value==='trellis'?hfSettings():openKey();};
+$('hf-form').onsubmit=event=>{event.preventDefault();const token=$('hf-token').value.trim();if(token&&!/^hf_[A-Za-z0-9]+$/.test(token))return toast('Paste a Hugging Face token beginning with hf_.',true);state.hfToken=token;updateKeyUI();try{sessionStorage.setItem('forma-hf-token',token);}catch{}$('hf-dialog').close();toast(token?'Hugging Face token saved. The provider validates it during generation.':'Using anonymous Hugging Face access.');};
+$('remove-hf-token').onclick=()=>{state.hfToken='';updateKeyUI();$('hf-token').value='';try{sessionStorage.removeItem('forma-hf-token');}catch{}$('hf-dialog').close();};
+$('import-glb').onclick=()=>$('glb-input').click();
+$('glb-input').onchange=async()=>{if(state.busy)return;const file=$('glb-input').files[0];if(!file)return;setBusy(true);$('cancel-button').hidden=true;try{if(file.size>100*1024*1024)throw new Error('Choose a GLB smaller than 100 MB.');progress('Opening your model','Loading geometry and embedded textures…',50);await showMesh(await file.arrayBuffer(),file.name.replace(/\.glb$/i,''));toast('Textured GLB imported. Preview or export your model.');}catch(error){toast(error.message,true);}finally{setBusy(false);$('glb-input').value='';}};
+async function generateTextured(){
+  if(!state.image)return toast('Upload a reference image first.',true);
+  state.controller=new AbortController();setBusy(true);
+  try{
+    const buffer=await generateMesh({image:state.originalImage || state.image,token:state.hfToken,detail:state.detail,signal:state.controller.signal,onProgress:progress});
+    state.controller.signal.throwIfAborted();await showMesh(buffer,state.file?.replace(/\.[^.]+$/,'') || 'Textured model','TRELLIS.2');toast('Textured model ready. Its textures are included in GLB export.');
+  }catch(error){toast(state.controller.signal.aborted?'Generation cancelled. Your previous model is unchanged.':error.message,!state.controller.signal.aborted);}finally{setBusy(false);state.controller=null;}
+}
+
 $('generate-button').onclick=()=>generate();$('cancel-button').onclick=()=>state.controller?.abort();
 $('refine-button').onclick=()=>{if(!state.key){openKey();return;}$('refine-dialog').showModal();};
 $('refine-form').onsubmit=event=>{event.preventDefault();const prompt=$('refine-prompt').value.trim();if(!prompt)return;$('refine-dialog').close();generate(prompt);};
