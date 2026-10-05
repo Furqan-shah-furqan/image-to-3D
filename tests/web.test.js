@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {validateScene} from '../lib/scene-spec.js';
 import {examples} from '../src/examples.js';
 import {buildModel} from '../src/model.js';
-import {availableModels,resolveModel,extractJson,imagePart,googleRequest,requestKey} from '../lib/gemini.js';
+import {availableModels,resolveModel,extractJson,imagePart,googleRequest,requestKey,generateContent} from '../lib/gemini.js';
 import generate from '../api/generate.js';
 import models from '../api/models.js';
 import review from '../api/review.js';
@@ -37,6 +37,24 @@ test('API errors redact secrets; truncated and invalid model output fail clearly
   assert.throws(()=>extractJson({candidates:[{finishReason:'MAX_TOKENS'}]}),/output space/);
   assert.throws(()=>extractJson({candidates:[{content:{parts:[{text:'{"x":'}]}}]}),/incomplete/);
   assert.throws(()=>imagePart('data:image/png;base64,dGhpcyBpcyBub3QgYW4gaW1hZ2U='),/file type/);
+});
+test('Auto retries an overloaded model then falls back to an available Flash Lite',async()=>{
+  const calls=[],delays=[];
+  const fetcher=async(url,options)=>{
+    if(!options.body)return {ok:true,json:async()=>({models:['gemini-3.8-flash','gemini-3.5-flash-lite'].map(id=>({name:`models/${id}`,supportedGenerationMethods:['generateContent']}))})};
+    calls.push(url);assert.equal(JSON.parse(options.body).contents[0].parts[0].text,'same request');
+    return calls.length<3?{ok:false,status:503,json:async()=>({error:{message:'High demand'}})}:{ok:true,json:async()=>({candidates:[]})};
+  };
+  const result=await generateContent('synthetic-key','auto',{contents:[{parts:[{text:'same request'}]}]},10000,fetcher,async ms=>delays.push(ms));
+  assert.equal(result.model,'gemini-3.5-flash-lite');assert.equal(calls.length,3);
+  assert.ok(calls[0].includes('gemini-3.8-flash'));assert.equal(calls[0],calls[1]);assert.equal(delays.length,2);
+});
+test('explicit models stay selected; retries are bounded and client errors are not retried',async()=>{
+  for(const status of [400,401,403,429,503]){
+    let calls=0;const fetcher=async url=>{calls++;assert.ok(url.includes('gemini-chosen:generateContent'));return {ok:false,status,json:async()=>({error:{message:'Provider error'}})};};
+    await assert.rejects(()=>generateContent('synthetic-key','gemini-chosen',{},10000,fetcher,async()=>{}),e=>e.providerStatus===status);
+    assert.equal(calls,status===503?3:1);
+  }
 });
 function response(){return {statusCode:200,headers:{},setHeader(k,v){this.headers[k]=v;},status(n){this.statusCode=n;return this;},json(data){this.data=data;return this;}};}
 test('accepts opaque dotted API keys and rejects whitespace or control characters',()=>{

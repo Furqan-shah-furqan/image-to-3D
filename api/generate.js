@@ -1,4 +1,4 @@
-import {prepareRequest,requestKey,resolveModel,imagePart,googleRequest,extractJson,sendError,ApiError} from '../lib/gemini.js';
+import {prepareRequest,requestKey,imagePart,generateContent,extractJson,sendError,ApiError} from '../lib/gemini.js';
 import {sceneSchema,validateScene} from '../lib/scene-spec.js';
 import {generationInstruction} from '../lib/prompt.js';
 export default async function handler(req,res) {
@@ -17,8 +17,7 @@ export default async function handler(req,res) {
       instruction+=`\nRefine the current scene, addressing the user request and discrepancies against the reference. Preserve already correct parts. Return the COMPLETE updated scene, not a patch. Current scene: ${JSON.stringify(body.current)}`;
     }
     parts.push({text:instruction});
-    const model=await resolveModel(key,body.model);
-    const data=await googleRequest(`models/${model}:generateContent`,key,{
+    const {data,model}=await generateContent(key,body.model,{
       systemInstruction:{parts:[{text:generationInstruction}]},contents:[{role:'user',parts}],
       generationConfig:{temperature:.35,maxOutputTokens:32768,responseMimeType:'application/json',responseSchema:sceneSchema}
     });

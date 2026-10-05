@@ -173,18 +173,18 @@ async function generate(refinement){
     const basePrompt=refinement || $('prompt').value.trim();
     const initial=await api('generate',requestBody(basePrompt,current,render),state.key,state.controller.signal);
     if(state.controller.signal.aborted)throw new DOMException('Cancelled','AbortError');
-    state.model=initial.model;showSpec(initial.spec,true);$('model-source').textContent=initial.model.replace('gemini-','Gemini ');
+    showSpec(initial.spec,true);$('model-source').textContent=initial.model.replace('gemini-','Gemini ');
     progress('Building your 3D scene','Creating geometry, applying materials and lighting…',65);
     if($('review-option').checked){
       try{
         progress('Comparing the result','Checking the render against your reference image…',75);
-        const {review}=await api('review',{image:state.image,render:captureRender(),model:state.model},state.key,state.controller.signal);
+        const {review}=await api('review',{image:state.image,render:captureRender(),model:initial.model},state.key,state.controller.signal);
         if(review.needsRevision && review.issues.length){
           progress('A little closer to your reference','Refining the proportions and details identified in the visual review…',90);
           const revised=await api('generate',requestBody(`${basePrompt}\nImprove these specific issues: ${review.issues.join('; ')}`.slice(0,2000),state.spec,captureRender()),state.key,state.controller.signal);
           showSpec(revised.spec,true);$('model-source').textContent=revised.model.replace('gemini-','Gemini ');
           // Re-review the final render; an earlier review must not masquerade as a final score.
-          const final=await api('review',{image:state.image,render:captureRender(),model:state.model},state.key,state.controller.signal);
+          const final=await api('review',{image:state.image,render:captureRender(),model:revised.model},state.key,state.controller.signal);
           $('model-notes').textContent=`${final.review.summary} AI similarity estimate: ${Math.round(final.review.similarity)}%. ${final.review.needsRevision?'Further refinement suggested. ':''}${state.spec.limitations.join(' ')}`;
         }else $('model-notes').textContent=`${review.summary} AI similarity estimate: ${Math.round(review.similarity)}%. ${state.spec.limitations.join(' ')}`;
       }catch(error){if(state.controller.signal.aborted)throw error;toast(`Model generated, but the optional visual refinement did not finish: ${error.message}`,true);$('model-notes').textContent=`${state.spec.description} Visual review incomplete. ${state.spec.limitations.join(' ')}`;}
