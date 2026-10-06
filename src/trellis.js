@@ -7,7 +7,7 @@ export async function generateMesh({image,token='',detail='balanced',signal,onPr
   let client;signal?.throwIfAborted();
   try{
     onProgress('Connecting to TRELLIS','Waiting for the free Hugging Face GPU service…',10);
-    client=await connect(SPACE,{...(token?{hf_token:token}:{}),events:['data','status']});
+    client=await connect(SPACE,{...(token?{token}:{}),events:['data','status']});
     signal?.throwIfAborted();
     async function run(endpoint,payload,title,percent){
       signal?.throwIfAborted();const job=client.submit(endpoint,payload);let result;

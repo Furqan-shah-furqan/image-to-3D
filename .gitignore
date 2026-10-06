@@ -102,3 +102,4 @@ dist/
 .env.*
 !\.env.example
 verification/
+out/
