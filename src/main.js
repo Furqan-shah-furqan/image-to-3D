@@ -5,6 +5,9 @@ import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
 import {GLTFExporter} from 'three/addons/exporters/GLTFExporter.js';
 import {createIcons,Box,KeyRound,Github,Scan,ImagePlus,RefreshCw,X,Sparkles,ArrowUpRight,ArrowRight,Info,ScanEye,Columns2,Camera,Maximize,MousePointer2,Minus,Plus,SlidersHorizontal,Diamond,WandSparkles,Download,ShieldCheck,PlugZap,Eye,Layers3,Circle} from 'lucide';
 import {generateMesh} from './trellis.js';
+import {generateHunyuan} from './hunyuan.js';
+import {generateHunyuanMV} from './hunyuan-mv.js';
+const isMesh=()=>['trellis','hunyuan','hunyuan-mv'].includes($('generation-engine').value);
 import {loadMesh,configureTextureQuality} from './mesh.js';
 import {createProjectStore} from './projects.js';
 import {captureReview} from './review-render.js';
@@ -23,7 +26,7 @@ const state={key:'',model:'auto',image:null,file:null,detail:'balanced',spec:nul
 try{state.key=sessionStorage.getItem('forma-key') || '';state.model=sessionStorage.getItem('forma-model') || 'auto';}catch{}
 let toastTimer;
 function toast(message,error=false){clearTimeout(toastTimer);$('toast').textContent=message;$('toast').classList.toggle('error',error);$('toast').hidden=false;toastTimer=setTimeout(()=>$('toast').hidden=true,error?15000:5500);}
-function updateKeyUI(){const mesh=$('generation-engine').value==='trellis',connected=mesh?state.hfToken:state.key;$('key-label').textContent=connected?(mesh?'HF token saved':'API key connected'):(mesh?'Add HF token':'Add API key');$('key-dot').style.display=connected?'block':'none';}
+function updateKeyUI(){const mesh=isMesh(),connected=mesh?state.hfToken:state.key;$('key-label').textContent=connected?(mesh?'HF token saved':'API key connected'):(mesh?'Add HF token':'Add API key');$('key-dot').style.display=connected?'block':'none';}
 updateKeyUI();
 function openKey(){ $('api-key').value=state.key;$('key-error').textContent='';$('key-dialog').showModal(); }
 $('key-button').onclick=openKey;
@@ -197,7 +200,7 @@ function requestBody(prompt,current,render){return {image:state.image,extraImage
 async function generate(refinement){
   if(state.busy)return;
   if(state.uploading)return toast('Wait for the image to finish loading.',true);
-  if(!refinement && $('generation-engine').value==='trellis')return generateTextured();
+  if(!refinement && isMesh())return generateTextured();
   if(state.refsLoading)return toast('Wait for the reference angles to finish loading.',true);
   if(!state.key){openKey();return;}
   if(!state.image){toast('Upload a reference image first.',true);$('image-input').click();return;}
@@ -238,24 +241,16 @@ async function generate(refinement){
 }
 
 state.hfToken='';try{state.hfToken=sessionStorage.getItem('forma-hf-token') || '';}catch{}
-function engineUI(){updateKeyUI();const mesh=$('generation-engine').value==='trellis';$('trellis-options').hidden=!mesh;$('prompt').hidden=mesh;$('prompt').previousElementSibling.hidden=mesh;$('add-angles').hidden=mesh;$('angle-list').hidden=mesh;$('review-option').closest('label').hidden=mesh;}
+function engineUI(){updateKeyUI();const mesh=isMesh();$('trellis-options').hidden=!mesh;$('prompt').hidden=mesh;$('prompt').previousElementSibling.hidden=mesh;$('add-angles').hidden=mesh;$('angle-list').hidden=mesh;$('review-option').closest('label').hidden=mesh;$('mv-panel').hidden=$('generation-engine').value!=='hunyuan-mv';}
 $('generation-engine').onchange=engineUI;engineUI();
 function hfSettings(){$('hf-token').value=state.hfToken;$('hf-dialog').showModal();}
 $('hf-settings').onclick=hfSettings;
 // The top-right key button opens settings for the selected generation engine.
-$('key-button').onclick=()=>{$('generation-engine').value==='trellis'?hfSettings():openKey();};
+$('key-button').onclick=()=>{isMesh()?hfSettings():openKey();};
 $('hf-form').onsubmit=event=>{event.preventDefault();const token=$('hf-token').value.trim();if(token&&!/^hf_[A-Za-z0-9]+$/.test(token))return toast('Paste a Hugging Face token beginning with hf_.',true);state.hfToken=token;updateKeyUI();try{sessionStorage.setItem('forma-hf-token',token);}catch{}$('hf-dialog').close();toast(token?'Hugging Face token saved. The provider validates it during generation.':'Using anonymous Hugging Face access.');};
 $('remove-hf-token').onclick=()=>{state.hfToken='';updateKeyUI();$('hf-token').value='';try{sessionStorage.removeItem('forma-hf-token');}catch{}$('hf-dialog').close();};
 $('import-glb').onclick=()=>$('glb-input').click();
 $('glb-input').onchange=async()=>{if(state.busy)return;const file=$('glb-input').files[0];if(!file)return;setBusy(true);$('cancel-button').hidden=true;try{if(file.size>100*1024*1024)throw new Error('Choose a GLB smaller than 100 MB.');progress('Opening your model','Loading geometry and embedded textures…',50);await showMesh(await file.arrayBuffer(),file.name.replace(/\.glb$/i,''));toast('Textured GLB imported. Preview or export your model.');}catch(error){toast(error.message,true);}finally{setBusy(false);$('glb-input').value='';}};
-async function generateTextured(){
-  if(!state.image)return toast('Upload a reference image first.',true);
-  state.controller=new AbortController();setBusy(true);
-  try{
-    const buffer=await generateMesh({image:state.originalImage || state.image,token:state.hfToken,detail:state.detail,signal:state.controller.signal,onProgress:progress});
-    state.controller.signal.throwIfAborted();await showMesh(buffer,state.file?.replace(/\.[^.]+$/,'') || 'Textured model','TRELLIS.2');toast('Textured model ready. Its textures are included in GLB export.');
-  }catch(error){toast(state.controller.signal.aborted?'Generation cancelled. Your previous model is unchanged.':error.message,!state.controller.signal.aborted);}finally{setBusy(false);state.controller=null;}
-}
 
 $('generate-button').onclick=()=>generate();$('cancel-button').onclick=()=>state.controller?.abort();
 $('refine-button').onclick=()=>{if(!state.key){openKey();return;}$('refine-dialog').showModal();};
@@ -314,7 +309,7 @@ async function saveProject(){
   try{await write;$('project-save-status').textContent='Saved on this device';await refreshProjects();}catch(error){$('project-save-status').textContent='Save failed — keep this tab open and export your model.';throw error;}
 }
 function scheduleProjectSave(){if(!projectReady||projectLoading||state.busy)return;clearTimeout(projectSaveTimer);projectSaveTimer=setTimeout(()=>saveProject().catch(error=>toast(`Project save failed: ${error.message}`,true)),650);}
-function blankSnapshot(){return {spec:null,assetKind:'procedural',generated:false,image:null,file:null,extraImages:[],detail:'balanced',engine:'trellis',prompt:'',review:true,stage:{background:'#f6f5f2',light:'1',grid:true,rotate:false,wireframe:false}};}
+function blankSnapshot(){return {spec:null,assetKind:'procedural',generated:false,image:null,file:null,extraImages:[],detail:'balanced',engine:'hunyuan',prompt:'',review:true,stage:{background:'#f6f5f2',light:'1',grid:true,rotate:false,wireframe:false}};}
 async function restoreProject(snapshot){
   state.image=snapshot.image;state.originalImage=snapshot.originalImage || null;state.file=snapshot.file;state.extraImages=snapshot.extraImages || [];state.detail=snapshot.detail || 'balanced';
   $('generation-engine').value=snapshot.engine || 'trellis';engineUI();$('prompt').value=snapshot.prompt || '';$('review-option').checked=snapshot.review ?? true;
@@ -357,3 +352,31 @@ controls?.addEventListener('end',scheduleProjectSave);document.addEventListener(
   else{activeProject={id:crypto.randomUUID(),name:'Untitled project'};await projectStore.put({...activeProject,updatedAt:Date.now(),snapshot:captureProject()});}
   projectReady=true;projectLoading=false;await refreshProjects();$('project-save-status').textContent='Saved on this device';
 }catch(error){projectLoading=false;$('project-save-status').textContent='Project storage unavailable';$('new-project').disabled=true;toast(`Local project storage could not open: ${error.message}`,true);}})();
+async function generateTextured(){
+  if(!state.image)return toast('Upload a reference image first.',true);
+  if(!state.hfToken){hfSettings();return toast('Add your Hugging Face token first. Anonymous GPU quota is almost always exhausted.',true);}
+  state.controller=new AbortController();setBusy(true);
+  const opts=()=>({image:state.originalImage || state.image,front:state.originalImage || state.image,back:$('mv-back')?.files[0] || null,left:$('mv-left')?.files[0] || null,right:$('mv-right')?.files[0] || null,token:state.hfToken,detail:state.detail,signal:state.controller.signal,onProgress:progress});
+  const engines={'hunyuan-mv':{run:generateHunyuanMV,label:'Hunyuan3D multi-view'},hunyuan:{run:generateHunyuan,label:'Hunyuan3D 2.1'},trellis:{run:generateMesh,label:'TRELLIS.2'}};
+  const selected=$('generation-engine').value;
+  const order=selected==='hunyuan-mv'?['hunyuan-mv','hunyuan']:selected==='hunyuan'?['hunyuan','trellis']:['trellis'];
+  const errors=[];
+  try{
+    let buffer,label;
+    for(let i=0;i<order.length;i++){
+      const key=order[i];
+      try{buffer=await engines[key].run(opts());label=engines[key].label;break;}
+      catch(error){
+        if(state.controller.signal.aborted)throw error;
+        errors.push(error.message);
+        // Every Space shares one ZeroGPU quota, so a fallback cannot help.
+        if(/quota/i.test(error.message))break;
+        if(i<order.length-1)toast(`${engines[key].label} failed. Trying ${engines[order[i+1]].label}…`,true);
+      }
+    }
+    if(!buffer)throw new Error(errors.join('\n\n'));
+    state.controller.signal.throwIfAborted();
+    await showMesh(buffer,state.file?.replace(/\.[^.]+$/,'') || 'Textured model',label);
+    toast(`Model ready (${label}). Textures are included in GLB export.`);
+  }catch(error){toast(state.controller.signal.aborted?'Generation cancelled. Your previous model is unchanged.':error.message,!state.controller.signal.aborted);}finally{setBusy(false);state.controller=null;}
+}
